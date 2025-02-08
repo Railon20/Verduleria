@@ -39,14 +39,15 @@ def start_bot():
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
     
-    # Global handlers para reiniciar el flujo:
+    # Global handler para reiniciar el flujo (para los botones "login" y "register" desde logout)
     dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
-    # Handler para logout
+    # Handler para "Cerrar Sesión"
     dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
+    
     dp.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text(
         "Comandos disponibles:\n/start - Iniciar el bot\n/cancel - Cancelar operación\n/help - Mostrar este mensaje"
     )))
-
+    
     updater.start_polling()
     logger.info("Bot iniciado en modo polling...")
     while True:

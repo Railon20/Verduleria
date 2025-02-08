@@ -18,12 +18,18 @@ def start(update: Update, context: CallbackContext) -> int:
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
     Si no, solicita que el usuario elija entre registrarse o iniciar sesión.
-    Esta versión utiliza el mensaje fuente, ya sea de update.message o de update.callback_query.message.
+    Ahora verifica si se ha forzado el modo (login o register) para iniciar directamente el flujo.
     """
-    # Usar el mensaje disponible (ya sea update.message o update.callback_query.message)
     msg = update.message if update.message else (update.callback_query.message if update.callback_query else None)
     if msg is None:
         return ConversationHandler.END
+
+    # Si se ha forzado un modo (por ejemplo, desde la pantalla de logout)
+    if "force_mode" in context.user_data:
+        mode = context.user_data.pop("force_mode")
+        context.user_data["auth_mode"] = mode
+        msg.reply_text("Por favor, envía tu nombre de usuario:")
+        return WAIT_USERNAME
 
     user_id = update.effective_user.id
     session = get_session()
@@ -131,11 +137,15 @@ def menu_button_handler(update: Update, context: CallbackContext) -> int:
 def restart_auth(update: Update, context: CallbackContext) -> int:
     """
     Reinicia el flujo de autenticación.
-    Se usa cuando se pulsa "Iniciar Sesión" o "Registrarse" en la pantalla de logout.
+    Se usa cuando se pulsa "Iniciar Sesión" o "Registrarse" desde la pantalla de logout.
+    Establece el modo forzado y llama a start().
     """
     if update.callback_query:
         update.callback_query.answer()
-    return start(update, context)
+        mode = update.callback_query.data  # "login" o "register"
+        context.user_data["force_mode"] = mode
+        return start(update, context)
+    return ConversationHandler.END
 
 auth_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],

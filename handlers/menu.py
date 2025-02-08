@@ -17,7 +17,6 @@ def show_main_menu(update: Update, context: CallbackContext):
         [InlineKeyboardButton("Cerrar Sesión", callback_data="logout")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     if update.message:
         update.message.reply_text("Seleccione una opción:", reply_markup=reply_markup)
     elif update.callback_query:
@@ -25,7 +24,7 @@ def show_main_menu(update: Update, context: CallbackContext):
 
 def logout_handler(update: Update, context: CallbackContext):
     """
-    Maneja el callback "Cerrar Sesión": elimina el usuario (simulando logout) y muestra
+    Al pulsar "Cerrar Sesión", elimina el usuario (simulando logout) y muestra
     "Sesión Cerrada" con dos botones: "Iniciar Sesión" y "Registrarse".
     """
     query = update.callback_query
