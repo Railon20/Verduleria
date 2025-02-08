@@ -1,5 +1,3 @@
-# handlers/auth.py
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CallbackContext,
@@ -12,14 +10,14 @@ from telegram.ext import (
 from database.models import User
 from utils.db_utils import get_session
 
-# Estados para el ConversationHandler:
-# 0: CHOOSING, 1: WAIT_USERNAME, 2: WAIT_PASSWORD, 3: WAIT_ADDRESS
+# Estados
 CHOOSING, WAIT_USERNAME, WAIT_PASSWORD, WAIT_ADDRESS = range(4)
 
 def start(update: Update, context: CallbackContext) -> int:
-    """Maneja el comando /start.
+    """
+    Maneja /start.
     Si el usuario ya está registrado, muestra el menú principal.
-    De lo contrario, solicita registrarse o iniciar sesión.
+    De lo contrario, solicita que el usuario elija entre registrarse o iniciar sesión.
     """
     user_id = update.effective_user.id
     session = get_session()
@@ -43,8 +41,8 @@ def auth_choice(update: Update, context: CallbackContext) -> int:
     """Captura la elección (registro o login) y solicita el nombre de usuario."""
     query = update.callback_query
     query.answer()
-    choice = query.data
-    context.user_data["auth_mode"] = choice  # 'register' o 'login'
+    choice = query.data  # 'register' o 'login'
+    context.user_data["auth_mode"] = choice
     query.edit_message_text("Por favor, envía tu nombre de usuario:")
     return WAIT_USERNAME
 
@@ -56,8 +54,9 @@ def receive_username(update: Update, context: CallbackContext) -> int:
     return WAIT_PASSWORD
 
 def receive_password(update: Update, context: CallbackContext) -> int:
-    """Recibe la contraseña. Si es login, valida las credenciales;
-    si es registro, solicita la dirección.
+    """Recibe la contraseña.
+    - Si es login: valida las credenciales.
+    - Si es registro: solicita la dirección.
     """
     password = update.message.text
     context.user_data["password"] = password
@@ -84,12 +83,11 @@ def receive_password(update: Update, context: CallbackContext) -> int:
         return WAIT_ADDRESS
 
 def receive_address(update: Update, context: CallbackContext) -> int:
-    """Recibe la dirección, crea el usuario y muestra el mensaje final con el botón 'Menu Principal'."""
+    """Recibe la dirección, crea el usuario y muestra el mensaje final con botón 'Menu Principal'."""
     address = update.message.text
     context.user_data["address"] = address
     user_id = update.effective_user.id
     session = get_session()
-
     if session.query(User).filter(User.telegram_id == str(user_id)).first():
         update.message.reply_text("Ya estás registrado. Por favor, inicia sesión.")
         return WAIT_USERNAME
@@ -98,7 +96,7 @@ def receive_address(update: Update, context: CallbackContext) -> int:
             telegram_id=str(user_id),
             username=context.user_data.get("username"),
             password_hash=context.user_data.get("password"),
-            address=address  # Asegúrate de que el modelo User tenga el campo 'address'
+            address=address
         )
         session.add(new_user)
         session.commit()
@@ -108,26 +106,33 @@ def receive_address(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
 
 def cancel(update: Update, context: CallbackContext) -> int:
-    """Permite cancelar la operación."""
     update.message.reply_text("Operación cancelada.")
     return ConversationHandler.END
 
 def menu_button_handler(update: Update, context: CallbackContext) -> int:
-    """Maneja el callback del botón 'Menu Principal' y muestra el menú principal."""
+    """Maneja el callback 'main_menu' y muestra el menú principal."""
     query = update.callback_query
     query.answer()
     from handlers.menu import show_main_menu
     show_main_menu(update, context)
     return ConversationHandler.END
 
-# Definición del ConversationHandler para la autenticación
+def restart_auth(update: Update, context: CallbackContext) -> int:
+    """
+    Reinicia el flujo de autenticación a partir de un callback 'login' o 'register'.
+    Esto se usará cuando se pulse el botón "Iniciar Sesión" o "Registrarse" en la pantalla de logout.
+    """
+    if update.callback_query:
+        update.callback_query.answer()
+    return start(update, context)
+
 auth_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
         CHOOSING: [CallbackQueryHandler(auth_choice, pattern="^(register|login)$")],
         WAIT_USERNAME: [MessageHandler(Filters.text & ~Filters.command, receive_username)],
         WAIT_PASSWORD: [MessageHandler(Filters.text & ~Filters.command, receive_password)],
-        WAIT_ADDRESS: [MessageHandler(Filters.text & ~Filters.command, receive_address)],
+        WAIT_ADDRESS: [MessageHandler(Filters.text & ~Filters.command, receive_address)]
     },
     fallbacks=[
         CommandHandler("cancel", cancel),

@@ -1,5 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, CallbackQueryHandler  # Asegurarse de importar CallbackQueryHandler
+from telegram.ext import CallbackContext, CallbackQueryHandler
 from utils.db_utils import get_session
 from database.models import User
 
@@ -17,7 +17,6 @@ def show_main_menu(update: Update, context: CallbackContext):
         [InlineKeyboardButton("Cerrar Sesión", callback_data="logout")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     if update.message:
         update.message.reply_text("Seleccione una opción:", reply_markup=reply_markup)
     elif update.callback_query:
@@ -25,8 +24,7 @@ def show_main_menu(update: Update, context: CallbackContext):
 
 def logout_handler(update: Update, context: CallbackContext):
     """
-    Maneja el callback de "Cerrar Sesión".  
-    Elimina el registro del usuario (simulando el cierre de sesión) y muestra un mensaje
+    Al pulsar "Cerrar Sesión", elimina el registro del usuario (simulando el logout) y muestra
     "Sesión Cerrada" con dos botones: "Iniciar Sesión" y "Registrarse".
     """
     query = update.callback_query
@@ -34,13 +32,9 @@ def logout_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     session = get_session()
     user = session.query(User).filter(User.telegram_id == str(user_id)).first()
-    
     if user:
-        # Para simular el logout, se elimina el registro del usuario.
-        # En un entorno real podrías simplemente limpiar la sesión sin eliminar el registro.
         session.delete(user)
         session.commit()
-    
     keyboard = [
         [InlineKeyboardButton("Iniciar Sesión", callback_data="login")],
         [InlineKeyboardButton("Registrarse", callback_data="register")]
@@ -48,9 +42,5 @@ def logout_handler(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_text("Sesión Cerrada.", reply_markup=reply_markup)
 
-# Handler global para capturar callbacks que inician con "menu_"
+# Handler global para el menú principal
 menu_handler = CallbackQueryHandler(lambda update, context: show_main_menu(update, context), pattern="^menu_")
-
-# (Asegúrate de que en main.py se registre también el logout_handler, por ejemplo:
-# dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
-# )
