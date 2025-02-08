@@ -11,3 +11,4 @@ mercadopago==2.2.0
 
 # Biblioteca para realizar peticiones HTTP (útil en algunas integraciones)
 requests==2.28.1
+Flask==2.2.3
