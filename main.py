@@ -30,7 +30,7 @@ def main():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Registro de todos los handlers...
+    # Aquí se registran todos los handlers (auth_handler, menu_handler, etc.)
     # dp.add_handler(auth_handler)
     # dp.add_handler(menu_handler)
     # dp.add_handler(ordenar_handler)
@@ -41,19 +41,18 @@ def main():
     # dp.add_handler(complete_order_conv_handler)
     # ... y demás comandos/handlers
 
-    # Comprobar si estamos en un entorno de producción (por ejemplo, Heroku)
-    HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")
-    if HEROKU_APP_NAME:
-        # Configuración de Webhook para Heroku
-        PORT = int(os.environ.get("PORT", "8443"))
+    # Configurar el webhook para Render
+    RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+    if RENDER_EXTERNAL_URL:
+        PORT = int(os.environ.get("PORT", "10000"))
         updater.start_webhook(listen="0.0.0.0",
                               port=PORT,
                               url_path=TELEGRAM_BOT_TOKEN)
-        webhook_url = f"https://{HEROKU_APP_NAME}.herokuapp.com/{TELEGRAM_BOT_TOKEN}"
+        webhook_url = f"{RENDER_EXTERNAL_URL}/{TELEGRAM_BOT_TOKEN}"
         updater.bot.setWebhook(webhook_url)
         print(f"Webhook configurado en: {webhook_url}")
     else:
-        # Modo polling para desarrollo
+        # Modo polling para desarrollo local
         updater.start_polling()
         print("Bot iniciado en modo polling...")
 
