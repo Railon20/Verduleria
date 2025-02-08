@@ -27,32 +27,30 @@ def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
 def main():
+    def main():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Aquí se registran todos los handlers (auth_handler, menu_handler, etc.)
+    # Registro de tus handlers...
     # dp.add_handler(auth_handler)
     # dp.add_handler(menu_handler)
-    # dp.add_handler(ordenar_handler)
-    # dp.add_handler(carritos_handler)
-    # dp.add_handler(historial_handler)
-    # dp.add_handler(pending_orders_handler)
-    # dp.add_handler(pedidos_back_handler)
-    # dp.add_handler(complete_order_conv_handler)
-    # ... y demás comandos/handlers
+    # ...
 
-    # Configurar el webhook para Render
+    # Configurar el webhook para Render usando un puerto permitido.
+    # Si Render no provee la variable PORT o si quieres forzar un puerto permitido, usa 8443.
+    PORT = int(os.environ.get("PORT", "8443"))
     RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+
     if RENDER_EXTERNAL_URL:
-        PORT = int(os.environ.get("PORT", "10000"))
-        updater.start_webhook(listen="0.0.0.0",
-                              port=PORT,
-                              url_path=TELEGRAM_BOT_TOKEN)
+        updater.start_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=TELEGRAM_BOT_TOKEN
+        )
         webhook_url = f"{RENDER_EXTERNAL_URL}/{TELEGRAM_BOT_TOKEN}"
-        updater.bot.setWebhook(webhook_url)
+        updater.bot.set_webhook(webhook_url)
         print(f"Webhook configurado en: {webhook_url}")
     else:
-        # Modo polling para desarrollo local
         updater.start_polling()
         print("Bot iniciado en modo polling...")
 
