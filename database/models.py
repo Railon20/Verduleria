@@ -17,13 +17,15 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True)
     telegram_id = Column(String, unique=True, nullable=False)
     username = Column(String, nullable=True)
     password_hash = Column(String, nullable=True)
+    address = Column(String, nullable=True)  # <-- Nuevo campo
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Relaciones, etc.
+
 
     # Relaciones: cada usuario puede tener múltiples carritos y pedidos.
     carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
