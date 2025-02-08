@@ -10,7 +10,7 @@ from telegram.ext import (
 from database.models import User
 from utils.db_utils import get_session
 
-# Estados para el ConversationHandler
+# Estados del ConversationHandler
 CHOOSING, WAIT_USERNAME, WAIT_PASSWORD, WAIT_ADDRESS = range(4)
 
 def start(update: Update, context: CallbackContext) -> int:
@@ -18,18 +18,19 @@ def start(update: Update, context: CallbackContext) -> int:
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
     Si no, solicita que el usuario elija entre registrarse o iniciar sesión.
-    Ahora se corrige para manejar tanto update.message como update.callback_query.
+    Esta versión utiliza el mensaje fuente, ya sea de update.message o de update.callback_query.message.
     """
+    # Usar el mensaje disponible (ya sea update.message o update.callback_query.message)
+    msg = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+    if msg is None:
+        return ConversationHandler.END
+
     user_id = update.effective_user.id
     session = get_session()
     user = session.query(User).filter(User.telegram_id == str(user_id)).first()
 
     if user:
-        text = "¡Bienvenido de nuevo! Accediendo al menú principal..."
-        if update.message:
-            update.message.reply_text(text)
-        elif update.callback_query:
-            update.callback_query.edit_message_text(text)
+        msg.reply_text("¡Bienvenido de nuevo! Accediendo al menú principal...")
         from handlers.menu import show_main_menu
         show_main_menu(update, context)
         return ConversationHandler.END
@@ -39,20 +40,14 @@ def start(update: Update, context: CallbackContext) -> int:
             [InlineKeyboardButton("Iniciar Sesión", callback_data='login')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = "No estás registrado. Por favor, elige una opción:"
-        if update.message:
-            update.message.reply_text(text, reply_markup=reply_markup)
-        elif update.callback_query:
-            # Usamos el mensaje del callback query para responder
-            update.callback_query.message.reply_text(text, reply_markup=reply_markup)
+        msg.reply_text("No estás registrado. Por favor, elige una opción:", reply_markup=reply_markup)
         return CHOOSING
 
 def auth_choice(update: Update, context: CallbackContext) -> int:
-    """Captura la elección (registro o login) y solicita el nombre de usuario."""
+    """Captura la elección ('register' o 'login') y solicita el nombre de usuario."""
     query = update.callback_query
     query.answer()
-    choice = query.data  # 'register' o 'login'
-    context.user_data["auth_mode"] = choice
+    context.user_data["auth_mode"] = query.data  # 'register' o 'login'
     query.edit_message_text("Por favor, envía tu nombre de usuario:")
     return WAIT_USERNAME
 
@@ -81,7 +76,8 @@ def receive_password(update: Update, context: CallbackContext) -> int:
             update.message.reply_text("No estás registrado. Por favor, regístrate primero.")
             return WAIT_USERNAME
         else:
-            if existing_user.username == context.user_data.get("username") and existing_user.password_hash == password:
+            if (existing_user.username == context.user_data.get("username") and 
+                existing_user.password_hash == password):
                 update.message.reply_text("Inicio de sesión exitoso. ¡Bienvenido!")
                 from handlers.menu import show_main_menu
                 show_main_menu(update, context)
@@ -95,7 +91,7 @@ def receive_password(update: Update, context: CallbackContext) -> int:
 
 def receive_address(update: Update, context: CallbackContext) -> int:
     """
-    Recibe la dirección, crea el usuario y muestra un mensaje final con el botón 'Menu Principal'.
+    Recibe la dirección, crea el usuario y muestra el mensaje final con el botón "Menu Principal".
     """
     address = update.message.text
     context.user_data["address"] = address
@@ -123,7 +119,9 @@ def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 def menu_button_handler(update: Update, context: CallbackContext) -> int:
-    """Maneja el callback 'main_menu' y muestra el menú principal."""
+    """
+    Maneja el callback "main_menu" y muestra el menú principal.
+    """
     query = update.callback_query
     query.answer()
     from handlers.menu import show_main_menu
@@ -132,8 +130,8 @@ def menu_button_handler(update: Update, context: CallbackContext) -> int:
 
 def restart_auth(update: Update, context: CallbackContext) -> int:
     """
-    Reinicia el flujo de autenticación. Se usa cuando se pulsa "Iniciar Sesión"
-    o "Registrarse" desde la pantalla de logout.
+    Reinicia el flujo de autenticación.
+    Se usa cuando se pulsa "Iniciar Sesión" o "Registrarse" en la pantalla de logout.
     """
     if update.callback_query:
         update.callback_query.answer()

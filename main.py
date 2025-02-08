@@ -5,7 +5,7 @@ import logging
 from flask import Flask
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from config import TELEGRAM_BOT_TOKEN, DEBUG
-from handlers.auth import auth_handler, restart_auth
+from handlers.auth import auth_handler, restart_auth, menu_button_handler
 from handlers.menu import menu_handler, show_main_menu, logout_handler
 from handlers.ordenar import ordenar_handler
 from handlers.carritos import carritos_handler
@@ -38,12 +38,11 @@ def start_bot():
     dp.add_handler(pending_orders_handler)
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
-
-    # Global handlers para reiniciar el flujo de autenticación:
-    dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
-    # Handler para logout (aunque también está en auth, lo manejamos globalmente)
-    dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
     
+    # Global handlers para reiniciar el flujo:
+    dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
+    # Handler para logout
+    dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
     dp.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text(
         "Comandos disponibles:\n/start - Iniciar el bot\n/cancel - Cancelar operación\n/help - Mostrar este mensaje"
     )))
