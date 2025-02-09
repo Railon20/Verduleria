@@ -45,7 +45,7 @@ def start_bot():
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
     
-    # Global handler para reiniciar el flujo (para "login" y "register")
+    # Handler global para reiniciar el flujo (para "login" y "register")
     dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
     # Handler para "Cerrar Sesión"
     dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
@@ -56,7 +56,8 @@ def start_bot():
     
     dp.add_error_handler(global_error_handler)
     
-    updater.start_polling()
+    # Inicia polling con drop_pending_updates para reducir conflictos
+    updater.start_polling(drop_pending_updates=True, timeout=20)
     logger.info("Bot iniciado en modo polling...")
     while True:
         time.sleep(10)

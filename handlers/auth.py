@@ -1,3 +1,4 @@
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CallbackContext,
@@ -7,8 +8,11 @@ from telegram.ext import (
     MessageHandler,
     Filters,
 )
+import telegram.error
 from database.models import User
 from utils.db_utils import get_session
+
+logger = logging.getLogger(__name__)
 
 # Estados del ConversationHandler
 CHOOSING, WAIT_USERNAME, WAIT_PASSWORD, WAIT_ADDRESS = range(4)
@@ -18,21 +22,25 @@ def start(update: Update, context: CallbackContext) -> int:
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
     Si no, solicita que el usuario elija entre registrarse o iniciar sesión.
-    Se utiliza context.bot.send_message basándose en update.effective_chat.id
-    para garantizar que siempre se envíe el mensaje, tanto si update.message es None como si se trata de un callback.
-    Además, si se ha forzado el modo (force_mode), se salta la verificación y se inicia el flujo.
+    Se adapta para funcionar tanto si el update viene de un mensaje como de un callback.
+    Además, si se ha forzado el modo en context.user_data, se inicia el flujo directamente.
     """
+    # Obtén el chat_id y el mensaje fuente
     chat_id = update.effective_chat.id
-    session = get_session()
-    
-    # Si se ha forzado un modo (por ejemplo, desde la pantalla de logout)
+    msg = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+    if msg is None:
+        return ConversationHandler.END
+
+    # Si se ha forzado un modo (login o register) desde la pantalla de logout
     if "force_mode" in context.user_data:
         mode = context.user_data.pop("force_mode")
         context.user_data["auth_mode"] = mode
         context.bot.send_message(chat_id=chat_id, text="Por favor, envía tu nombre de usuario:")
         return WAIT_USERNAME
 
+    session = get_session()
     user = session.query(User).filter(User.telegram_id == str(update.effective_user.id)).first()
+
     if user:
         context.bot.send_message(chat_id=chat_id, text="¡Bienvenido de nuevo! Accediendo al menú principal...")
         from handlers.menu import show_main_menu
@@ -72,9 +80,8 @@ def receive_password(update: Update, context: CallbackContext) -> int:
     context.user_data["password"] = password
     auth_mode = context.user_data.get("auth_mode", "register")
     if auth_mode == "login":
-        user_id = update.effective_user.id
         session = get_session()
-        existing_user = session.query(User).filter(User.telegram_id == str(user_id)).first()
+        existing_user = session.query(User).filter(User.telegram_id == str(update.effective_user.id)).first()
         if not existing_user:
             update.message.reply_text("No estás registrado. Por favor, regístrate primero.")
             return WAIT_USERNAME
@@ -98,14 +105,13 @@ def receive_address(update: Update, context: CallbackContext) -> int:
     """
     address = update.message.text
     context.user_data["address"] = address
-    user_id = update.effective_user.id
     session = get_session()
-    if session.query(User).filter(User.telegram_id == str(user_id)).first():
+    if session.query(User).filter(User.telegram_id == str(update.effective_user.id)).first():
         update.message.reply_text("Ya estás registrado. Por favor, inicia sesión.")
         return WAIT_USERNAME
     else:
         new_user = User(
-            telegram_id=str(user_id),
+            telegram_id=str(update.effective_user.id),
             username=context.user_data.get("username"),
             password_hash=context.user_data.get("password"),
             address=address
@@ -133,16 +139,21 @@ def menu_button_handler(update: Update, context: CallbackContext) -> int:
 
 def restart_auth(update: Update, context: CallbackContext) -> int:
     """
-    Reinicia el flujo de autenticación.
-    Se usa cuando se pulsa "Iniciar Sesión" o "Registrarse" desde la pantalla de logout.
+    Reinicia el flujo de autenticación cuando se pulsa "login" o "register" desde la pantalla de logout.
     Establece el modo forzado y llama a start().
     """
     if update.callback_query:
         update.callback_query.answer()
         mode = update.callback_query.data  # "login" o "register"
         context.user_data["force_mode"] = mode
-    # En lugar de usar update.message, usamos effective_chat para enviar el mensaje
-    return start(update, context)
+    try:
+        return start(update, context)
+    except Exception as e:
+        logger.error("Error en restart_auth: %s", e)
+        # Si ocurre algún error, enviamos manualmente el prompt
+        chat_id = update.effective_chat.id
+        context.bot.send_message(chat_id=chat_id, text="Por favor, envía tu nombre de usuario:")
+        return WAIT_USERNAME
 
 auth_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
