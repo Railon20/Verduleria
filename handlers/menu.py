@@ -2,13 +2,11 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CallbackQueryHandler
 from utils.db_utils import get_session
 from database.models import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 def show_main_menu(update: Update, context: CallbackContext):
-    """
-    Muestra el menú principal con las opciones:
-      - Ordenar, Historial, Pedidos Pendientes, Carritos
-      - Botón "Cerrar Sesión"
-    """
     keyboard = [
         [InlineKeyboardButton("Ordenar", callback_data="menu_ordenar")],
         [InlineKeyboardButton("Historial", callback_data="menu_historial")],
@@ -23,10 +21,7 @@ def show_main_menu(update: Update, context: CallbackContext):
         update.callback_query.edit_message_text("Seleccione una opción:", reply_markup=reply_markup)
 
 def logout_handler(update: Update, context: CallbackContext):
-    """
-    Al pulsar "Cerrar Sesión", elimina el usuario (simulando logout) y muestra
-    "Sesión Cerrada" con dos botones: "Iniciar Sesión" y "Registrarse".
-    """
+    logger.info("logout_handler() llamado")
     query = update.callback_query
     query.answer()
     user_id = update.effective_user.id
