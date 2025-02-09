@@ -45,7 +45,7 @@ def start_bot():
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
     
-    # Global handlers para reiniciar el flujo (para "login" y "register")
+    # Global handler para reiniciar el flujo (para "login" y "register")
     dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
     # Handler para "Cerrar Sesión"
     dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))

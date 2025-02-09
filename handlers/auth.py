@@ -18,32 +18,23 @@ def start(update: Update, context: CallbackContext) -> int:
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
     Si no, solicita que el usuario elija entre registrarse o iniciar sesión.
-    Se adapta para funcionar tanto si el update viene de un mensaje
-    como de un callback query.
+    Se utiliza context.bot.send_message basándose en update.effective_chat.id
+    para garantizar que siempre se envíe el mensaje, tanto si update.message es None como si se trata de un callback.
+    Además, si se ha forzado el modo (force_mode), se salta la verificación y se inicia el flujo.
     """
-    # Asignamos el mensaje y el usuario correctamente:
-    if update.message:
-        msg = update.message
-        user_obj = update.effective_user
-    elif update.callback_query:
-        msg = update.callback_query.message
-        user_obj = update.callback_query.from_user
-    else:
-        return ConversationHandler.END
-
+    chat_id = update.effective_chat.id
+    session = get_session()
+    
     # Si se ha forzado un modo (por ejemplo, desde la pantalla de logout)
     if "force_mode" in context.user_data:
         mode = context.user_data.pop("force_mode")
         context.user_data["auth_mode"] = mode
-        msg.reply_text("Por favor, envía tu nombre de usuario:")
+        context.bot.send_message(chat_id=chat_id, text="Por favor, envía tu nombre de usuario:")
         return WAIT_USERNAME
 
-    user_id = user_obj.id
-    session = get_session()
-    user = session.query(User).filter(User.telegram_id == str(user_id)).first()
-
+    user = session.query(User).filter(User.telegram_id == str(update.effective_user.id)).first()
     if user:
-        msg.reply_text("¡Bienvenido de nuevo! Accediendo al menú principal...")
+        context.bot.send_message(chat_id=chat_id, text="¡Bienvenido de nuevo! Accediendo al menú principal...")
         from handlers.menu import show_main_menu
         show_main_menu(update, context)
         return ConversationHandler.END
@@ -53,7 +44,7 @@ def start(update: Update, context: CallbackContext) -> int:
             [InlineKeyboardButton("Iniciar Sesión", callback_data='login')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        msg.reply_text("No estás registrado. Por favor, elige una opción:", reply_markup=reply_markup)
+        context.bot.send_message(chat_id=chat_id, text="No estás registrado. Por favor, elige una opción:", reply_markup=reply_markup)
         return CHOOSING
 
 def auth_choice(update: Update, context: CallbackContext) -> int:
@@ -80,7 +71,6 @@ def receive_password(update: Update, context: CallbackContext) -> int:
     password = update.message.text
     context.user_data["password"] = password
     auth_mode = context.user_data.get("auth_mode", "register")
-
     if auth_mode == "login":
         user_id = update.effective_user.id
         session = get_session()
@@ -89,7 +79,7 @@ def receive_password(update: Update, context: CallbackContext) -> int:
             update.message.reply_text("No estás registrado. Por favor, regístrate primero.")
             return WAIT_USERNAME
         else:
-            if (existing_user.username == context.user_data.get("username") and 
+            if (existing_user.username == context.user_data.get("username") and
                 existing_user.password_hash == password):
                 update.message.reply_text("Inicio de sesión exitoso. ¡Bienvenido!")
                 from handlers.menu import show_main_menu
@@ -132,7 +122,9 @@ def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 def menu_button_handler(update: Update, context: CallbackContext) -> int:
-    """Maneja el callback "main_menu" y muestra el menú principal."""
+    """
+    Maneja el callback "main_menu" y muestra el menú principal.
+    """
     query = update.callback_query
     query.answer()
     from handlers.menu import show_main_menu
@@ -149,6 +141,7 @@ def restart_auth(update: Update, context: CallbackContext) -> int:
         update.callback_query.answer()
         mode = update.callback_query.data  # "login" o "register"
         context.user_data["force_mode"] = mode
+    # En lugar de usar update.message, usamos effective_chat para enviar el mensaje
     return start(update, context)
 
 auth_handler = ConversationHandler(
