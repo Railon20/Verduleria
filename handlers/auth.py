@@ -14,17 +14,21 @@ from utils.db_utils import get_session
 CHOOSING, WAIT_USERNAME, WAIT_PASSWORD, WAIT_ADDRESS = range(4)
 
 def start(update: Update, context: CallbackContext) -> int:
-
-    print(f"User encontrado: {user}")
-    
     """
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
     Si no, solicita que el usuario elija entre registrarse o iniciar sesión.
-    Ahora verifica si se ha forzado el modo (login o register) para iniciar directamente el flujo.
+    Se adapta para funcionar tanto si el update viene de un mensaje
+    como de un callback query.
     """
-    msg = update.message if update.message else (update.callback_query.message if update.callback_query else None)
-    if msg is None:
+    # Asignamos el mensaje y el usuario correctamente:
+    if update.message:
+        msg = update.message
+        user_obj = update.effective_user
+    elif update.callback_query:
+        msg = update.callback_query.message
+        user_obj = update.callback_query.from_user
+    else:
         return ConversationHandler.END
 
     # Si se ha forzado un modo (por ejemplo, desde la pantalla de logout)
@@ -34,7 +38,7 @@ def start(update: Update, context: CallbackContext) -> int:
         msg.reply_text("Por favor, envía tu nombre de usuario:")
         return WAIT_USERNAME
 
-    user_id = update.effective_user.id
+    user_id = user_obj.id
     session = get_session()
     user = session.query(User).filter(User.telegram_id == str(user_id)).first()
 
@@ -128,9 +132,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 def menu_button_handler(update: Update, context: CallbackContext) -> int:
-    """
-    Maneja el callback "main_menu" y muestra el menú principal.
-    """
+    """Maneja el callback "main_menu" y muestra el menú principal."""
     query = update.callback_query
     query.answer()
     from handlers.menu import show_main_menu
@@ -147,8 +149,7 @@ def restart_auth(update: Update, context: CallbackContext) -> int:
         update.callback_query.answer()
         mode = update.callback_query.data  # "login" o "register"
         context.user_data["force_mode"] = mode
-        return start(update, context)
-    return ConversationHandler.END
+    return start(update, context)
 
 auth_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],

@@ -42,5 +42,5 @@ def logout_handler(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_text("Sesión Cerrada.", reply_markup=reply_markup)
 
-# Handler global para el menú principal (si se requiere)
+# Handler global para el menú principal (opcional)
 menu_handler = CallbackQueryHandler(lambda update, context: show_main_menu(update, context), pattern="^menu_")
