@@ -38,6 +38,8 @@ def start_bot():
     dp.add_handler(pending_orders_handler)
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
+    dp.add_handler(CommandHandler("start", start))
+
     
     # Global handler para reiniciar el flujo (para los botones "login" y "register" desde logout)
     dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))

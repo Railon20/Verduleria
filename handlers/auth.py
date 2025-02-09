@@ -14,6 +14,9 @@ from utils.db_utils import get_session
 CHOOSING, WAIT_USERNAME, WAIT_PASSWORD, WAIT_ADDRESS = range(4)
 
 def start(update: Update, context: CallbackContext) -> int:
+
+    print(f"User encontrado: {user}")
+    
     """
     Maneja el comando /start.
     Si el usuario ya está registrado, muestra el menú principal.
