@@ -4,6 +4,7 @@ import time
 import logging
 from flask import Flask
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
+import telegram
 from config import TELEGRAM_BOT_TOKEN, DEBUG
 from handlers.auth import auth_handler, restart_auth, menu_button_handler
 from handlers.menu import menu_handler, show_main_menu, logout_handler
@@ -25,8 +26,18 @@ app = Flask(__name__)
 def index():
     return "Bot is running!"
 
+def global_error_handler(update, context):
+    # Capturamos el error y, si es de tipo Conflict, lo ignoramos
+    try:
+        raise context.error
+    except telegram.error.Conflict:
+        logger.warning("Conflict error ignorado: %s", context.error)
+    except Exception as e:
+        logger.error("Update %s caused error %s", update, context.error)
+
 def start_bot():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
+    # Aseguramos que no haya webhook activo
     updater.bot.delete_webhook()
     dp = updater.dispatcher
 
@@ -38,10 +49,8 @@ def start_bot():
     dp.add_handler(pending_orders_handler)
     dp.add_handler(pedidos_back_handler)
     dp.add_handler(complete_order_conv_handler)
-    dp.add_handler(CommandHandler("start", start))
-
     
-    # Global handler para reiniciar el flujo (para los botones "login" y "register" desde logout)
+    # Global handler para reiniciar el flujo (para "login" y "register" en la pantalla de logout)
     dp.add_handler(CallbackQueryHandler(restart_auth, pattern="^(login|register)$"))
     # Handler para "Cerrar Sesión"
     dp.add_handler(CallbackQueryHandler(logout_handler, pattern="^logout$"))
@@ -50,6 +59,9 @@ def start_bot():
         "Comandos disponibles:\n/start - Iniciar el bot\n/cancel - Cancelar operación\n/help - Mostrar este mensaje"
     )))
     
+    # Registrar el manejador de errores global
+    dp.add_error_handler(global_error_handler)
+
     updater.start_polling()
     logger.info("Bot iniciado en modo polling...")
     while True:
