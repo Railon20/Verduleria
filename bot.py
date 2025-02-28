@@ -30,7 +30,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
-    filters,
+    filters
 )
 import mercadopago
 import datetime
@@ -95,7 +95,10 @@ DB_PASSWORD = os.environ.get('DB_PASSWORD', 'lalala22')
 DB_HOST = os.environ.get('DB_HOST', 'localhost')
 DB_PORT = os.environ.get('DB_PORT', '5432')
 
-TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TOKEN:
+    raise ValueError("No se encontró la variable de entorno TELEGRAM_TOKEN.")
+
 
 MP_SDK = os.environ.get('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
@@ -2744,7 +2747,7 @@ def main() -> None:
     global TELEGRAM_BOT
     init_db()
     application = Application.builder()\
-        .token("TELEGRAM_TOKEN")\
+        .token(TOKEN)\
         .build()
     TELEGRAM_BOT = application.bot
 
