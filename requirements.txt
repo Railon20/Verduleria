@@ -1,0 +1,19 @@
+# Entorno de ejecución
+python-telegram-bot==20.3
+Flask==2.2.3
+
+# Manejo de zonas horarias
+tzlocal==5.2
+pytz==2021.3
+
+# Programación de tareas
+APScheduler==3.9.1
+
+# Conexión a PostgreSQL
+psycopg2-binary==2.9.3
+
+# SDK de Mercado Pago
+mercadopago==2.3.1
+
+# (Opcional) Para cargar variables de entorno
+python-dotenv==1.0.0
