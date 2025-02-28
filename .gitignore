@@ -1,0 +1,15 @@
+# Entorno virtual
+venv/
+.venv/
+
+# Variables de entorno
+.env
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+
+# Archivos de log
+*.log
+
+# Otros archivos que consideres sensibles
