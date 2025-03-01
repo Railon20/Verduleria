@@ -42,8 +42,6 @@ from telegram.error import BadRequest
 from dotenv import load_dotenv
 
 
-load_dotenv()
-
 app = Flask(__name__)
 
 ADMIN_CHAT_ID = 6952319386  # Reemplaza con el chat ID de tu administrador
@@ -89,11 +87,11 @@ logger = logging.getLogger(__name__)
 
 
 # Configuración de la base de datos
-DB_NAME = os.environ.get('DB_NAME', 'verduleria2')
-DB_USER = os.environ.get('DB_USER', 'carlos')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', 'lalala22')
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
-DB_PORT = os.environ.get('DB_PORT', '5432')
+DB_NAME = os.getenv('DB_NAME')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TOKEN:
