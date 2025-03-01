@@ -1255,7 +1255,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if conn:
             conn.close()
 
-    # Armar el teclado del menú principal
+    # Si el usuario no existe, inicia el proceso de registro
+    if not user:
+        # Se inicia el registro solicitando el nombre
+        await update.message.reply_text("Bienvenido. Para comenzar, ingresa tu nombre:")
+        return NAME
+
+    # Si el usuario ya está registrado, se muestra el menú principal
     keyboard = [
         [InlineKeyboardButton("Ordenar", callback_data="menu_ordenar")],
         [InlineKeyboardButton("Historial", callback_data="menu_historial")],
@@ -1263,10 +1269,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
         [InlineKeyboardButton("Cambiar Dirección", callback_data="menu_cambiar")]
     ]
-    # Para el personal autorizado (IDs en allowed_ids) se agrega la opción "Gestión de Pedidos y Equipos"
     if telegram_id in allowed_ids:
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos y Equipos", callback_data="gestion_pedidos")])
-    # Si el usuario es trabajador (según la tabla trabajadores) se agrega el botón "Gestión de Pedidos"
     if es_trabajador(telegram_id):
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos", callback_data="gestion_pedidos_personal")])
     
@@ -1276,7 +1280,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     else:
         await update.callback_query.edit_message_text("Menú Principal:", reply_markup=reply_markup)
     return MAIN_MENU
-
 
 
 async def name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
