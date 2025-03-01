@@ -98,7 +98,7 @@ if not TOKEN:
     raise ValueError("No se encontró la variable de entorno TELEGRAM_TOKEN.")
 
 
-MP_SDK = os.environ.get('MP_SDK')
+MP_SDK = os.getenv('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
