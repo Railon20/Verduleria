@@ -52,6 +52,21 @@ TELEGRAM_BOT = None             # Se asignará luego de crear la aplicación
 allowed_ids = [ADMIN_CHAT_ID, PROVIDER_CHAT_ID]  # Puedes agregar los IDs del personal adicional aquí
 
 
+def admin_only(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if user_id not in allowed_ids:
+            # Si viene por mensaje
+            if update.message:
+                await update.message.reply_text("No tienes permisos para usar esta función.")
+            # Si viene por callback query
+            elif update.callback_query:
+                await update.callback_query.answer("No tienes permisos para usar esta función.", show_alert=True)
+            return ConversationHandler.END
+        return await func(update, context)
+    return wrapper
+
+
 # Configuración de logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -93,12 +108,20 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
 
+#DB_NAME = "verduleria2"
+#DB_USER = "carlos"
+#DB_PASSWORD = "lalala22"
+#DB_HOST = "localhost"
+#DB_PORT = "5432"
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+#TOKEN = "7564104399:AAHGNFyMSaVSbEQl3MDGFD4g-jaziwTRw_E"
 if not TOKEN:
     raise ValueError("No se encontró la variable de entorno TELEGRAM_TOKEN.")
 
 
 MP_SDK = os.getenv('MP_SDK')
+#MP_SDK = "APP_USR-6499289843479865-011213-c4290cd71ad5e17a9cec6f6e90c4de2c-1368333589"
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
@@ -117,6 +140,14 @@ def connect_db():
         host=os.environ.get('DB_HOST'),
         port=os.environ.get('DB_PORT')
     )
+
+    #return psycopg2.connect(
+    #    dbname=DB_NAME,
+    #    user=DB_USER,
+    #    password=DB_PASSWORD,
+    #    host=DB_HOST,
+    #    port=DB_PORT
+    #)
 
 def init_db():
     """Crea la tabla 'users' si no existe."""
@@ -1257,23 +1288,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # Si el usuario no existe, inicia el proceso de registro
     if not user:
-        # Se inicia el registro solicitando el nombre
         await update.message.reply_text("Bienvenido. Para comenzar, ingresa tu nombre:")
         return NAME
 
-    # Si el usuario ya está registrado, se muestra el menú principal
+    # Si el usuario ya está registrado, se muestra el menú principal con las nuevas opciones
     keyboard = [
         [InlineKeyboardButton("Ordenar", callback_data="menu_ordenar")],
         [InlineKeyboardButton("Historial", callback_data="menu_historial")],
         [InlineKeyboardButton("Pedidos Pendientes", callback_data="menu_pedidos")],
         [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
-        [InlineKeyboardButton("Cambiar Dirección", callback_data="menu_cambiar")]
+        [InlineKeyboardButton("Cambiar Dirección", callback_data="menu_cambiar")],
+        [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
+        [InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
     ]
+    # Opciones para administradores y trabajadores (si corresponde)
     if telegram_id in allowed_ids:
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos y Equipos", callback_data="gestion_pedidos")])
     if es_trabajador(telegram_id):
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos", callback_data="gestion_pedidos_personal")])
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
     if update.message:
         await update.message.reply_text("Menú Principal:", reply_markup=reply_markup)
@@ -1322,12 +1354,15 @@ async def address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         [InlineKeyboardButton("Pedidos Pendientes", callback_data="menu_pedidos")],
         [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
         [InlineKeyboardButton("Cambiar Direccion", callback_data="menu_cambiar")],
+        [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
+        [InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Menú Principal:", reply_markup=reply_markup)
     return MAIN_MENU
 
 
+# Dentro de la función main_menu_handler, agrega las nuevas opciones.
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1348,6 +1383,7 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("Seleccione un producto:", reply_markup=reply_markup)
         return ORDERING
+
     elif data == "menu_historial":
         return await show_history_handler(update, context)
 
@@ -1361,11 +1397,16 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     elif data == "menu_cambiar":
         return await cambiar_direccion_handler(update, context)
 
+    elif data == "menu_contacto":
+        return await contacto_handler(update, context)
+
+    elif data == "menu_ayuda":
+        return await ayuda_handler(update, context)
+
     elif data == "gestion_pedidos":
         return await gestion_pedidos_handler(update, context)
 
     elif data == "gestion_pedidos_personal":
-        # Esta rama se activa cuando un trabajador pulsa el botón "Gestión de Pedidos"
         return await gestion_pedidos_personal_handler(update, context)
 
     elif data in ["back_main", "menu"]:
@@ -1374,15 +1415,14 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             [InlineKeyboardButton("Historial", callback_data="menu_historial")],
             [InlineKeyboardButton("Pedidos Pendientes", callback_data="menu_pedidos")],
             [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
-            [InlineKeyboardButton("Cambiar Dirección", callback_data="menu_cambiar")]
+            [InlineKeyboardButton("Cambiar Dirección", callback_data="menu_cambiar")],
+            [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
+            [InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
         ]
-        # Agregar botón de Gestión de Pedidos y Equipos para personal autorizado
         if user_id in allowed_ids:
             keyboard.append([InlineKeyboardButton("Gestión de Pedidos y Equipos", callback_data="gestion_pedidos")])
-        # Si el usuario es trabajador, se agrega el botón de Gestión de Pedidos para personal
         if es_trabajador(user_id):
             keyboard.append([InlineKeyboardButton("Gestión de Pedidos", callback_data="gestion_pedidos_personal")])
-        
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         rand_val = random.randint(0, 9999)
         new_text = f"Menú Principal: {now} - {rand_val}"
@@ -1399,7 +1439,7 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         await query.edit_message_text("Opción no implementada aún.")
         return MAIN_MENU
-
+    
 async def cancelar_cambio_direccion_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Cancela el cambio de dirección y regresa al menú principal.
@@ -1474,6 +1514,47 @@ async def crear_nuevo_equipo_handler(update: Update, context: ContextTypes.DEFAU
             raise e
     return GESTION_PEDIDOS
 
+async def contacto_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Muestra la información de contacto de la verdulería y un botón para volver al menú principal.
+    """
+    query = update.callback_query
+    await query.answer()
+    # Mensaje de ejemplo (modifícalo con la información real)
+    mensaje = (
+        "📞 *Contacto Verdulería Online*\n\n"
+        "Teléfono: +1 234 567 890\n"
+        "Email: contacto@verduleriaonline.com\n"
+        "Dirección: Calle Falsa 123, Ciudad Ejemplo\n\n"
+        "Para más información, visita nuestro sitio web: https://www.verduleriaonline.com"
+    )
+    keyboard = [[InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+    return MAIN_MENU
+
+async def ayuda_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Muestra un tutorial de uso del bot y un botón para volver al menú principal.
+    """
+    query = update.callback_query
+    await query.answer()
+    # Mensaje de ejemplo (modifícalo con el tutorial deseado)
+    mensaje = (
+        "A continuacion se explican las funciones del bot\n\n"
+        "El boton Ordenar, mostrara una lista de productos que podra seleccionar para agregar a un carrito, debera ingresar cuanto de ese producto quiere y agregarlo a un carrito existente o a uno nuevo que cree durante el proceso. Al finalizar, podra agregar mas productos, volver al menu principal o pagar el carrito, lo que enviara una notificacion al personal de la verduleria para que se realize una entrega a la direccion que proporciono al registrarse.\n\n"
+        "El boton Historial, mostrara los ultimos 20 pedidos entregdos exitosamente.\n\n"
+        "El boton Pedidos Pendientes, mostrara los ultimos 20 pedidos que esten pendientes de ser entregados.\n\n"
+        "El boton Carritos mostrara sus carritos, y al clickear uno, podra elegir entre ver los productos que ya tiene el carrito, agregar productos a ese carrito, quitarlos y eliminar el carrito.\n\n"
+        "El boton Cambiar Direccion, le permitira actualizar la direccion asociada a su cuenta.\n\n"
+        "El boton Contacto le mostrara una serie de datos de contacto de la verduleria.\n\n"
+    )
+    keyboard = [[InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+    return MAIN_MENU
+
+
 async def gestion_pedidos_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1483,8 +1564,7 @@ async def gestion_pedidos_handler(update: Update, context: ContextTypes.DEFAULT_
         [InlineKeyboardButton("Ver Equipos", callback_data="ver_equipos")],
         [InlineKeyboardButton("Crear Nuevo Equipo", callback_data="crear_nuevo_equipo")],
         [InlineKeyboardButton("Eliminar Equipos", callback_data="eliminar_equipos")],
-        [InlineKeyboardButton("Ver Conjuntos No Terminados", callback_data="ver_conjuntos_no_terminados")],
-        [InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")]
+        [InlineKeyboardButton("Ver Conjuntos No Terminados", callback_data="ver_conjuntos_no_terminados")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("Gestión de Pedidos y Equipos:", reply_markup=reply_markup)
@@ -1495,27 +1575,29 @@ async def gestion_pedidos_handler(update: Update, context: ContextTypes.DEFAULT_
 #########################################
 
 def get_all_conjuntos():
+    """
+    Retorna una lista de conjuntos que NO están asignados a ningún equipo,
+    cada uno con su id, número de conjunto, cantidad de pedidos pendientes y 'equipo_id' (que será None).
+    """
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, numero_conjunto, equipo_id FROM conjuntos")
+    # Filtramos los conjuntos que no tengan asignado un equipo (equipo_id IS NULL)
+    cur.execute("SELECT id, numero_conjunto FROM conjuntos WHERE equipo_id IS NULL")
     conjuntos = cur.fetchall()
     cur.close()
     conn.close()
-    logger.info(f"get_all_conjuntos() devuelve: {conjuntos}")
     conjuntos_list = []
     for row in conjuntos:
-        conjunto_id, numero_conjunto, equipo_id = row
+        conjunto_id, numero_conjunto = row
         pendientes = count_pending_orders_in_conjunto(conjunto_id)
         conjuntos_list.append({
             "id": conjunto_id,
             "numero": numero_conjunto,
-            "equipo_id": equipo_id,
-            "pendientes": pendientes
+            "pendientes": pendientes,
+            "equipo_id": None  # Agregamos explícitamente este valor para evitar KeyError
         })
     conjuntos_list.sort(key=lambda c: c["pendientes"])
-    logger.info(f"Conjuntos procesados: {conjuntos_list}")
     return conjuntos_list
-
 
 def get_equipo_info(equipo_id):
     """
@@ -1546,29 +1628,29 @@ def get_equipo_info(equipo_id):
 
 def get_all_equipos():
     """
-    Retorna una lista de equipos con sus datos e (stub) la cantidad de pedidos pendientes asignados a ese equipo.
-    Para este ejemplo se asume que la cantidad de pedidos pendientes del equipo se calcula a partir de los conjuntos asignados.
+    Retorna una lista de equipos con sus datos y la información de los integrantes
+    (nombres en lugar de IDs) obtenida mediante get_equipo_info.
     """
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, trabajador1, trabajador2 FROM equipos")
+    cur.execute("SELECT id FROM equipos")
     equipos = cur.fetchall()
     cur.close()
     conn.close()
     equipos_list = []
     for row in equipos:
-        equipo_id, t1, t2 = row
-        # Para el ejemplo, asignamos 0 pedidos pendientes (debes implementar la consulta real)
-        pendientes = 0  
+        equipo_id = row[0]
         info = get_equipo_info(equipo_id)
+        # Para este ejemplo, asignamos 0 pedidos pendientes; actualiza según tu lógica
+        pendientes = 0  
         equipos_list.append({
             "id": equipo_id,
             "pendientes": pendientes,
             "info": info  # Diccionario con nombres de integrantes
         })
-    # Ordenar por pendientes (ascendente)
     equipos_list.sort(key=lambda e: e["pendientes"])
     return equipos_list
+
 
 def assign_conjunto_to_equipo(conjunto_id, equipo_id):
     """
@@ -1617,15 +1699,13 @@ async def asignar_conjuntos_handler(update: Update, context: ContextTypes.DEFAUL
 
 async def select_conjunto_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Cuando se selecciona un conjunto, se verifica si ya tiene asignado un equipo.
-    Se informa al usuario cuál es el conjunto seleccionado y, a continuación, se muestran
-    los equipos existentes para asignarlo.
+    Cuando se selecciona un conjunto, se verifica si ya tiene asignado un equipo y 
+    se muestran los equipos disponibles (con los nombres de los integrantes) para asignarlo.
     """
     query = update.callback_query
     await query.answer()
-    logger.info(f"select_conjunto_handler triggered with data: {query.data}")
     try:
-        # Se espera el callback_data con formato "select_conjunto_{id}"
+        # Se espera que el callback_data tenga el formato "select_conjunto_{id}"
         parts = query.data.split("_")
         conjunto_id = int(parts[2])
     except Exception as e:
@@ -1644,20 +1724,21 @@ async def select_conjunto_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("Conjunto no encontrado.")
         return SELECCIONAR_EQUIPO
     equipo_id, num_conjunto = row
-    if equipo_id is not None:
+    if equipo_id:
         equipo_info = get_equipo_info(equipo_id)
         if equipo_info:
-            info = f"ya asignado a Equipo {equipo_info['id']} ({equipo_info['trabajador1']} y {equipo_info['trabajador2']})"
+            info = f"{equipo_info['trabajador1']} y {equipo_info['trabajador2']}"
         else:
-            info = "ya asignado a un equipo desconocido"
+            info = "equipo desconocido"
     else:
         info = "sin equipo asignado"
 
-    # Informamos al usuario cuál es el conjunto seleccionado
-    await query.edit_message_text(f"Ha seleccionado el Conjunto {num_conjunto} ({info}).\n\nAhora, seleccione un equipo para asignarlo:")
+    await query.edit_message_text(
+        f"Ha seleccionado el Conjunto {num_conjunto} ({info}).\n\nAhora, seleccione un equipo para asignarlo:"
+    )
 
-    # Mostramos la lista de equipos
-    equipos = get_all_equipos()
+    # Mostramos la lista de equipos disponibles (se asume que get_all_equipos utiliza get_equipo_info)
+    equipos = get_all_equipos()  # Esta función debe devolver cada equipo con un campo "info" con los nombres.
     if not equipos:
         await query.edit_message_text("No existen equipos creados.")
         return SELECCIONAR_EQUIPO
@@ -1665,13 +1746,15 @@ async def select_conjunto_handler(update: Update, context: ContextTypes.DEFAULT_
     equipo_buttons = []
     for equipo in equipos:
         eq_info = equipo["info"]
-        btn_text = f"Equipo {eq_info['id']} - {eq_info['trabajador1']} y {eq_info['trabajador2']} (Pendientes: {equipo['pendientes']})"
-        # El callback_data tiene el formato "asignar_{conjunto_id}_equipo_{equipo_id}"
-        equipo_buttons.append([InlineKeyboardButton(btn_text, callback_data=f"asignar_{conjunto_id}_equipo_{eq_info['id']}")])
+        # Mostramos solo los nombres de los integrantes, sin el ID
+        btn_text = f"{eq_info['trabajador1']} y {eq_info['trabajador2']} (Pendientes: {equipo['pendientes']})"
+        # Se utiliza el id del equipo para el callback
+        equipo_buttons.append([InlineKeyboardButton(btn_text, callback_data=f"asignar_{conjunto_id}_equipo_{equipo['id']}")])
     reply_markup = InlineKeyboardMarkup(equipo_buttons)
     await query.edit_message_text("Seleccione el equipo al cual asignar el conjunto:", reply_markup=reply_markup)
     context.user_data['selected_conjunto_id'] = conjunto_id
     return SELECCIONAR_EQUIPO
+
 
 
 async def asignar_equipo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1753,6 +1836,8 @@ async def product_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             [InlineKeyboardButton("Pedidos Pendientes", callback_data="menu_pedidos")],
             [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
             [InlineKeyboardButton("Cambiar Direccion", callback_data="menu_cambiar")],
+            [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
+        [   InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("Menú Principal:", reply_markup=reply_markup)
@@ -1859,6 +1944,7 @@ def eliminar_equipo(equipo_id):
         if conn:
             conn.close()
 
+@admin_only
 async def eliminar_equipo_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Maneja el comando para eliminar un equipo.
@@ -1915,6 +2001,7 @@ def get_conjuntos_no_terminados():
         logger.error(f"Error al obtener conjuntos no terminados: {e}")
         return []
 
+@admin_only
 async def crear_equipo_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Comando para crear un nuevo equipo.
@@ -1957,6 +2044,7 @@ def asignar_conjunto_por_numero(numero_conjunto: int, equipo_id: int) -> bool:
             conn.rollback()
         return False
 
+@admin_only
 async def asignar_conjunto_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Comando para asignar un conjunto a un equipo.
@@ -1998,6 +2086,7 @@ def revocar_conjunto_por_numero(numero_conjunto: int) -> bool:
             conn.rollback()
         return False
 
+@admin_only
 async def revocar_conjunto_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Comando para revocar un conjunto (desasignarlo de un equipo) por su número.
@@ -2019,12 +2108,11 @@ async def revocar_conjunto_command_handler(update: Update, context: ContextTypes
         await update.message.reply_text("Error al revocar el conjunto.")
     return MAIN_MENU
 
-
+@admin_only
 async def ver_conjuntos_no_terminados_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Muestra una lista de todos los conjuntos no terminados (con pedidos pendientes).
-    Al presionar uno se descargará el PDF corre
-    spondiente.
+    Al presionar uno se descargará el PDF correspondiente.
     """
     query = update.callback_query
     await query.answer()
@@ -2038,7 +2126,9 @@ async def ver_conjuntos_no_terminados_handler(update: Update, context: ContextTy
         buttons.append([InlineKeyboardButton(btn_text, callback_data=f"descargar_conjunto_{c['id']}")])
     reply_markup = InlineKeyboardMarkup(buttons)
     await query.edit_message_text("Seleccione un conjunto no terminado para descargar su PDF:", reply_markup=reply_markup)
-    return GESTION_PEDIDOS
+    # Retornamos el estado VER_EQUIPOS para que el handler 'descargar_conjunto_handler'
+    # (registrado para pattern "^descargar_conjunto_\\d+$") se active.
+    return VER_EQUIPOS
 
 
 async def cart_selection_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2060,18 +2150,25 @@ async def cart_selection_handler(update: Update, context: ContextTypes.DEFAULT_T
             return SELECT_CART
         # Guardar el carrito seleccionado para usarlo en el pago
         context.user_data['selected_cart_id'] = cart_id
-        # Mostrar pantalla de adhesión exitosa con 3 botones:
+        # Configurar el botón "Volver":
+        # Si el proceso se inició desde un carrito específico (origin == "carrito"), se muestra "Volver al menú del carrito".
+        # De lo contrario, se muestra "Volver al Menú Principal".
+        if context.user_data.get("origin") == "carrito":
+            back_button = InlineKeyboardButton("Volver al menú del carrito", callback_data=f"back_cart_{cart_id}")
+        else:
+            back_button = InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")
         keyboard = [
             [InlineKeyboardButton("Agregar más Productos", callback_data="add_more")],
             [InlineKeyboardButton("Pagar Carrito", callback_data="pay_cart")],
-            [InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")]
+            [back_button]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         msg = (f"Se agregó al carrito.\n"
                f"Total anterior: {total_anterior:.2f}\n"
                f"Subtotal de la adhesión: {subtotal:.2f}\n"
                f"Nuevo total: {nuevo_total:.2f}\n\n"
-               "¿Qué desea hacer a continuación?")
+               f"¿Qué desea hacer a continuación?\n\n"
+               f"Tenga en cuenta que si realiza el pago fuera del horario de atencion, el mismo se entregar durante la siguiente jornada laboral")
         await query.edit_message_text(msg, reply_markup=reply_markup)
         return POST_ADHESION
     elif data == "back_quantity":
@@ -2082,7 +2179,7 @@ async def cart_selection_handler(update: Update, context: ContextTypes.DEFAULT_T
             return ORDERING
         await query.edit_message_text(
             f"{product['name']}\n"
-            f"{'Precio por unidad: ' + str(product['price']) if product['sale_type']=='unidad' else 'Precio por 100 gramos: ' + str(product['price'])}\n\n"
+            f"{'Precio por unidad: ' + str(product['price']) if product['sale_type'] == 'unidad' else 'Precio por 100 gramos: ' + str(product['price'])}\n\n"
             "¿Cuánto desea agregar?"
         )
         return ASK_QUANTITY
@@ -2092,6 +2189,35 @@ async def cart_selection_handler(update: Update, context: ContextTypes.DEFAULT_T
         return NEW_CART
     else:
         return SELECT_CART
+
+def get_equipo_info(equipo_id):
+    """
+    Retorna un diccionario con los nombres de los integrantes del equipo,
+    consultando la tabla "trabajadores" usando el telegram_id de cada integrante.
+    Si no se encuentra la información, devuelve "N/D".
+    """
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute("SELECT trabajador1, trabajador2 FROM equipos WHERE id = %s", (equipo_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return None
+    t1, t2 = row
+    # Obtener nombres de los trabajadores
+    cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t1,))
+    nombre1 = cur.fetchone()
+    cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t2,))
+    nombre2 = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {
+        "trabajador1": nombre1[0] if nombre1 else "N/D",
+        "trabajador2": nombre2[0] if nombre2 else "N/D"
+    }
+
+
 
 # Función auxiliar para obtener los conjuntos asignados a un equipo
 def get_conjuntos_by_equipo(equipo_id):
@@ -2134,6 +2260,23 @@ def get_all_equipos_revocar():
                 "conjuntos": conjuntos
             })
     return equipos_list
+
+def get_next_available_conjunto_number():
+    """
+    Retorna el menor número entero positivo que NO está siendo usado en la tabla 'conjuntos'.
+    Esto permite reutilizar números liberados cuando se elimina un conjunto.
+    """
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute("SELECT numero_conjunto FROM conjuntos ORDER BY numero_conjunto")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    used_numbers = {row[0] for row in rows}
+    n = 1
+    while n in used_numbers:
+        n += 1
+    return n
 
 # Handler inicial para revocar conjuntos: muestra, para cada equipo, un mensaje con sus conjuntos asignados.
 async def revocar_conjuntos_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2246,7 +2389,8 @@ async def post_adhesion_handler(update: Update, context: ContextTypes.DEFAULT_TY
             keyboard.append([InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         msg = (f"Para pagar el carrito '{cart_name}', haga clic en 'Pagar'.\n"
-               "El mensaje de confirmación se enviará cuando se complete el pago.")
+               "El mensaje de confirmación se enviará cuando se complete el pago.\n\n"
+               "Cuando realize el pago, regrese al bot")
         await query.edit_message_text(msg, reply_markup=reply_markup)
         return POST_ADHESION
     elif data.startswith("back_main"):
@@ -2256,7 +2400,9 @@ async def post_adhesion_handler(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("Historial", callback_data="menu_historial")],
             [InlineKeyboardButton("Pedidos Pendientes", callback_data="menu_pedidos")],
             [InlineKeyboardButton("Carritos", callback_data="menu_carritos")],
-            [InlineKeyboardButton("Cambiar Direccion", callback_data="menu_cambiar")]
+            [InlineKeyboardButton("Cambiar Direccion", callback_data="menu_cambiar")],
+            [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
+        [InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("Menú Principal:", reply_markup=reply_markup)
@@ -2328,22 +2474,17 @@ def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
     """
     Inserta un nuevo pedido y lo asigna a un conjunto.
     La lógica es:
-      - Si no existe ningún conjunto, se crea el conjunto 1.
-      - Si existe un conjunto y éste tiene menos de 3 pedidos pendientes, se asigna ese mismo conjunto.
-      - Si el conjunto actual ya tiene 3 pedidos pendientes, se crea un nuevo conjunto con el siguiente número.
+      - Si no existe ningún conjunto, o el último conjunto tiene 3 o más pedidos pendientes,
+        se crea un nuevo conjunto utilizando el menor número disponible (reutilizando números liberados).
+      - En caso contrario, se utiliza el último conjunto creado.
     Retorna una tupla (order_id, conjunto_id).
     """
-    last = get_last_conjunto()
-    if last is None:
-        new_num = 1
+    last = get_last_conjunto()  # Retorna (conjunto_id, numero_conjunto) del último conjunto creado sin asignar
+    if last is None or count_pending_orders_in_conjunto(last[0]) >= 3:
+        new_num = get_next_available_conjunto_number()
         conjunto_id = create_new_conjunto(new_num)
     else:
-        last_conjunto_id, last_num = last
-        if count_pending_orders_in_conjunto(last_conjunto_id) < 3:
-            conjunto_id = last_conjunto_id
-        else:
-            new_num = last_num + 1
-            conjunto_id = create_new_conjunto(new_num)
+        conjunto_id = last[0]
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -2356,40 +2497,53 @@ def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
     conn.close()
     return order_id, conjunto_id
 
-
 # Función que recupera todos los equipos y calcula la suma de pedidos pendientes de todos sus conjuntos asignados.
 def get_all_equipos_for_view():
+    """
+    Retorna una lista de equipos con la información de los integrantes (nombres, no IDs)
+    y la suma de pedidos pendientes de todos los conjuntos asignados a ese equipo.
+    """
+    # Primero, obtenemos todos los equipos (solo sus IDs)
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, trabajador1, trabajador2 FROM equipos")
+    cur.execute("SELECT id FROM equipos")
     equipos = cur.fetchall()
     cur.close()
     conn.close()
+    
     equipos_list = []
     for row in equipos:
-        equipo_id, t1, t2 = row
-        # Recuperamos los conjuntos asignados a este equipo
+        equipo_id = row[0]
+        # Obtenemos la información del equipo (nombres de los integrantes)
+        info = get_equipo_info(equipo_id)
+        nombre1 = info["trabajador1"] if info else "N/D"
+        nombre2 = info["trabajador2"] if info else "N/D"
+        
+        # Recuperamos los conjuntos asignados a este equipo para calcular los pedidos pendientes
         conn = connect_db()
         cur = conn.cursor()
         cur.execute("SELECT id FROM conjuntos WHERE equipo_id = %s", (equipo_id,))
         conjuntos = cur.fetchall()
         cur.close()
         conn.close()
+        
         total_pendientes = 0
         for c in conjuntos:
             conjunto_id = c[0]
             total_pendientes += count_pending_orders_in_conjunto(conjunto_id)
+        
         equipos_list.append({
             "id": equipo_id,
-            "trabajador1": t1,
-            "trabajador2": t2,
+            "trabajador1": nombre1,
+            "trabajador2": nombre2,
             "total_pendientes": total_pendientes
         })
-    # Ordenar de menos a más pedidos pendientes
+    
+    # Ordenamos la lista de equipos de menor a mayor por pedidos pendientes
     equipos_list.sort(key=lambda e: e["total_pendientes"])
     return equipos_list
 
-# Handler para "Ver Equipos": muestra todos los equipos con la suma total de pedidos pendientes.
+
 async def ver_equipos_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -2400,13 +2554,15 @@ async def ver_equipos_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     message = "Equipos:\n\n"
     buttons = []
     for equipo in equipos:
-        equipo_text = f"Equipo {equipo['id']} ({equipo['trabajador1']} y {equipo['trabajador2']}) - {equipo['total_pendientes']} pedidos pendientes"
+        # Se muestran los nombres de los integrantes en lugar de sus IDs
+        equipo_text = f"Equipo: {equipo['trabajador1']} y {equipo['trabajador2']} - {equipo['total_pendientes']} pedidos pendientes"
         message += f"{equipo_text}\n"
         # El callback data incluye el id del equipo para pasar al handler ver_equipo_handler.
         buttons.append([InlineKeyboardButton(equipo_text, callback_data=f"ver_equipo_{equipo['id']}")])
     reply_markup = InlineKeyboardMarkup(buttons)
     await query.edit_message_text(message, reply_markup=reply_markup)
     return VER_EQUIPOS  # Asegúrate de tener el estado VER_EQUIPOS definido.
+
 
 # Handler que muestra la información detallada de un equipo y sus conjuntos asignados.
 async def ver_equipo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2631,8 +2787,12 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     """
     Crea un nuevo carrito para el usuario. Si en context.user_data se encuentran datos de adhesión
     (producto y cantidad), se agrega el producto al carrito recién creado; de lo contrario, se crea un carrito vacío.
-    Luego se envía un mensaje de confirmación con un botón "Aceptar" que, al presionarlo,
-    regresa al usuario a su lista de carritos (estado CARTS_LIST).
+    Luego muestra la pantalla de "¿Qué desea hacer a continuación?" con opciones:
+      - Agregar más productos
+      - Pagar Carrito
+      - Volver: “Volver al menú del carrito” si el proceso se inició desde un carrito específico (origin == "carrito")
+        o “Volver al Menú Principal” en caso contrario.
+    Retorna el estado POST_ADHESION.
     """
     cart_name = update.message.text.strip()
     telegram_id = update.effective_user.id
@@ -2640,6 +2800,9 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if not cart_id:
         await update.message.reply_text("Error al crear el carrito.")
         return SELECT_CART
+
+    # **Asignamos el ID del carrito recién creado en el contexto**
+    context.user_data['selected_cart_id'] = cart_id
 
     # Si existen datos de adhesión, se agrega el producto al carrito recién creado.
     product = context.user_data.get('selected_product')
@@ -2659,11 +2822,24 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         msg = f"Carrito *{cart_name}* creado correctamente."
 
-    # Se agrega un botón "Aceptar" que, al presionarlo, retorna al estado CARTS_LIST
-    keyboard = [[InlineKeyboardButton("Aceptar", callback_data="show_carts")]]
+    # Configurar el botón "Volver":
+    # Si el proceso se inició desde un carrito específico (origin == "carrito") se usa "back_cart_{cart_id}".
+    # En caso contrario se usa "back_main".
+    if context.user_data.get("origin") == "carrito":
+        back_button = InlineKeyboardButton("Volver al menú del carrito", callback_data=f"back_cart_{cart_id}")
+    else:
+        back_button = InlineKeyboardButton("Volver al Menú Principal", callback_data="back_main")
+
+    keyboard = [
+        [InlineKeyboardButton("Agregar más productos", callback_data="add_more")],
+        [InlineKeyboardButton("Pagar Carrito", callback_data="pay_cart")],
+        [back_button]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
-    return CARTS_LIST
+    return POST_ADHESION
+
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancela la conversación."""
