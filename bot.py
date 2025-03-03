@@ -32,12 +32,15 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+from cachetools import cached, TTLCache
 import mercadopago
 import datetime
 import random
 import os
 from flask import Flask, request, jsonify
 import threading
+from psycopg2 import pool
+from config import Config
 from telegram.error import BadRequest
 from dotenv import load_dotenv
 
@@ -97,16 +100,22 @@ logger = logging.getLogger(__name__)
     CREAR_NUEVO_EQUIPO,
     CAMBIAR_DIRECCION
 ) = range(18)
+ 
+
+# Crea un cache con un tiempo de vida de 300 segundos (5 minutos)
+user_info_cache = TTLCache(maxsize=1000, ttl=300)
 
 # Nota: Los estados CARTS_LIST y CART_MENU ya están definidos anteriormente (ej. 8 y 9).
-
-
-# Configuración de la base de datos
-DB_NAME = os.getenv('DB_NAME')
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_HOST = os.getenv('DB_HOST')
-DB_PORT = os.getenv('DB_PORT')
+# Configura el pool (ajusta los parámetros según tu entorno)
+db_pool = pool.ThreadedConnectionPool(
+    minconn=1,
+    maxconn=20,
+    dbname=os.getenv('DB_NAME'),
+    user=os.getenv('DB_USER'),
+    password=os.getenv('DB_PASSWORD'),
+    host=os.getenv('DB_HOST'),
+    port=os.getenv('DB_PORT')
+)
 
 #DB_NAME = ""
 #DB_USER = ""
@@ -125,6 +134,20 @@ MP_SDK = os.getenv('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
+@cached(cache=user_info_cache)
+def get_user_info_cached(telegram_id):
+    conn = connect_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name, address FROM users WHERE telegram_id = %s", (telegram_id,))
+        row = cur.fetchone()
+        return {'name': row[0], 'address': row[1]} if row else None
+    except Exception as e:
+        logger.error(f"Error al obtener info del usuario: {e}")
+        return None
+    finally:
+        cur.close()
+        release_db(conn)
 
 class SimpleContext:
     def __init__(self, bot):
@@ -132,14 +155,14 @@ class SimpleContext:
 
 
 def connect_db():
-    """Establece la conexión a la base de datos."""
-    return psycopg2.connect(
-        dbname=os.environ.get('DB_NAME'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        host=os.environ.get('DB_HOST'),
-        port=os.environ.get('DB_PORT')
-    )
+    """Obtiene una conexión del pool."""
+    try:
+        conn = db_pool.getconn()
+        if conn:
+            return conn
+    except Exception as e:
+        logger.error(f"Error obteniendo conexión del pool: {e}")
+        raise e
 
     #return psycopg2.connect(
     #    dbname=DB_NAME,
@@ -149,12 +172,20 @@ def connect_db():
     #    port=DB_PORT
     #)
 
+def release_db(conn):
+    """Devuelve la conexión al pool."""
+    try:
+        db_pool.putconn(conn)
+    except Exception as e:
+        logger.error(f"Error devolviendo conexión al pool: {e}")
+
 def init_db():
     """Crea la tabla 'users' si no existe."""
     conn = None
     cur = None
     try:
-        conn = connect_db()
+    # ... usar conn
+        conn.commit()  # si es necesario
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -179,7 +210,7 @@ def init_db():
         if cur is not None:
             cur.close()
         if conn is not None:
-            conn.close()
+            release_db(conn)
 
 async def show_carts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra la lista de carritos del usuario con botones para crear nuevo carrito y volver al menú principal."""
@@ -214,7 +245,7 @@ def update_order_status(confirmation_code):
     conn = None
     cur = None
     try:
-        conn = connect_db()
+    # ... usar conn
         cur = conn.cursor()
         # Se busca el pedido pendiente con el código dado
         cur.execute("SELECT id, telegram_id FROM orders WHERE confirmation_code = %s AND status = 'pendiente'", (confirmation_code,))
@@ -232,8 +263,7 @@ def update_order_status(confirmation_code):
             conn.rollback()
         return None
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        release_db(conn)
 
 async def change_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Maneja la entrada del código de confirmación para cambiar el estado de un pedido."""
@@ -268,8 +298,7 @@ def get_delivered_orders(telegram_id, limit=20):
         logger.error(f"Error al obtener pedidos entregados: {e}")
         return []
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        release_db(conn)
 
 async def show_history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra los últimos 20 pedidos entregados del usuario (historial)."""
@@ -309,7 +338,7 @@ def get_last_conjunto():
     cur.execute("SELECT id, numero_conjunto FROM conjuntos ORDER BY id DESC LIMIT 1")
     result = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     return result  # Ej: (3, 1) => id=3, numero_conjunto=1
 
 def count_pending_orders_in_conjunto(conjunto_id):
@@ -318,7 +347,7 @@ def count_pending_orders_in_conjunto(conjunto_id):
     cur.execute("SELECT COUNT(*) FROM orders WHERE conjunto_id = %s AND status = 'pendiente'", (conjunto_id,))
     count = cur.fetchone()[0]
     cur.close()
-    conn.close()
+    release_db(conn)
     return count
 
 # 1. Función para generar el PDF de un conjunto
@@ -351,7 +380,7 @@ def generate_conjunto_pdf(conjunto_id, show_confirmation=True):
     )
     pedidos = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     
     for pedido in pedidos:
         order_id, cart_id, confirmation_code, order_date, client_id = pedido
@@ -371,7 +400,7 @@ def generate_conjunto_pdf(conjunto_id, show_confirmation=True):
         pdf.ln(2)
         pdf.cell(0, 10, txt="Cliente:", ln=True)
         # Obtener información del cliente (usando tu función get_user_info)
-        client_info = get_user_info(client_id)
+        client_info = get_user_info_cached(client_id)
         if client_info:
             pdf.cell(0, 10, txt=f"Nombre: {client_info['name']}", ln=True)
             pdf.cell(0, 10, txt=f"Dirección: {client_info['address']}", ln=True)
@@ -404,7 +433,7 @@ def get_equipo_del_trabajador(telegram_id):
     cur.execute("SELECT id, trabajador1, trabajador2 FROM equipos WHERE trabajador1 = %s OR trabajador2 = %s", (telegram_id, telegram_id))
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     if row:
         equipo_id, t1, t2 = row
         return {"id": equipo_id, "trabajador1": t1, "trabajador2": t2}
@@ -425,7 +454,7 @@ def get_conjuntos_por_equipo(equipo_id):
     cur.execute("SELECT id, numero_conjunto FROM conjuntos WHERE equipo_id = %s", (equipo_id,))
     rows = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     conjuntos = []
     for row in rows:
         conjunto_id, numero = row
@@ -525,7 +554,7 @@ def create_new_conjunto(numero_conjunto):
     new_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     return new_id
 
 def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
@@ -557,7 +586,7 @@ def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
     order_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     return order_id, conjunto_id
 
 def count_pending_orders_in_conjunto(conjunto_id):
@@ -569,7 +598,7 @@ def count_pending_orders_in_conjunto(conjunto_id):
     cur.execute("SELECT COUNT(*) FROM orders WHERE conjunto_id = %s AND status = 'pendiente'", (conjunto_id,))
     count = cur.fetchone()[0]
     cur.close()
-    conn.close()
+    release_db(conn)
     return count
 
 def finalize_conjunto(conjunto_id):
@@ -581,7 +610,7 @@ def finalize_conjunto(conjunto_id):
     cur.execute("DELETE FROM conjuntos WHERE id = %s", (conjunto_id,))
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
 
 def update_order_state(order_id, new_state):
     """
@@ -599,7 +628,7 @@ def update_order_state(order_id, new_state):
     result = cur.fetchone()
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     if result:
          conjunto_id = result[0]
          if new_state == "entregado" and count_pending_orders_in_conjunto(conjunto_id) == 0:
@@ -620,7 +649,7 @@ def es_trabajador(telegram_id):
     cur.execute("SELECT 1 FROM trabajadores WHERE telegram_id = %s", (telegram_id,))
     result = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     return result is not None
 
 #########################################
@@ -861,7 +890,7 @@ def remove_product_from_cart(cart_id, product_id):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
 async def cambiar_direccion_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
@@ -871,7 +900,7 @@ async def cambiar_direccion_handler(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     telegram_id = query.from_user.id
-    user_info = get_user_info(telegram_id)
+    user_info = get_user_info_cached(telegram_id)
     current_address = user_info.get("address", "No definida") if user_info else "No definida"
     
     # Mostrar la dirección actual y pedir la nueva
@@ -906,7 +935,7 @@ async def procesar_cambio_direccion_handler(update: Update, context: ContextType
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
     
     keyboard = [[InlineKeyboardButton("Aceptar", callback_data="back_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -998,7 +1027,7 @@ def delete_cart(cart_id):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
 async def cart_delete_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Elimina el carrito seleccionado y muestra la lista actualizada de carritos."""
@@ -1059,7 +1088,7 @@ def get_user_carts(telegram_id):
         return []
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 def get_cart_details(cart_id):
     """Obtiene los detalles de los items del carrito, incluyendo el id del producto."""
@@ -1091,7 +1120,7 @@ def get_cart_details(cart_id):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
 
 def get_user_info(telegram_id):
@@ -1112,7 +1141,7 @@ def get_user_info(telegram_id):
         return None
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 async def send_order_notifications(cart_id, confirmation_code, context, user_id):
     """
@@ -1126,7 +1155,7 @@ async def send_order_notifications(cart_id, confirmation_code, context, user_id)
     items_text = ""
     for item in items:
         items_text += f"<b>{item['name']}</b>: {item['quantity']} = {item['subtotal']:.2f}\n\n"
-    user_info = get_user_info(user_id)  # Ya definida en tu código
+    user_info = get_user_info_cached(user_id)  # Ya definida en tu código
     if user_info is None:
         user_info = {"name": "Desconocido", "address": "Desconocida"}
     message = (
@@ -1186,7 +1215,7 @@ def add_product_to_cart(cart_id, product, quantity):
         return None, None, None
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 def create_new_cart(telegram_id, cart_name):
     """
@@ -1212,7 +1241,7 @@ def create_new_cart(telegram_id, cart_name):
         return None
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 
 
@@ -1239,7 +1268,7 @@ def get_products():
         return []
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 def get_product(product_id):
     """Obtiene los datos de un producto específico."""
@@ -1259,7 +1288,7 @@ def get_product(product_id):
         return None
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
 # ----------------- HANDLERS -----------------
 
@@ -1284,7 +1313,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
     # Si el usuario no existe, inicia el proceso de registro
     if not user:
@@ -1345,7 +1374,7 @@ async def address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("Fallo al registrar el usuario.")
     finally:
         if cur: cur.close()
-        if conn: conn.close()
+        if conn: release_db(conn)
 
     # Mostrar menú principal tras el registro
     keyboard = [
@@ -1585,7 +1614,7 @@ def get_all_conjuntos():
     cur.execute("SELECT id, numero_conjunto FROM conjuntos WHERE equipo_id IS NULL")
     conjuntos = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     conjuntos_list = []
     for row in conjuntos:
         conjunto_id, numero_conjunto = row
@@ -1610,7 +1639,7 @@ def get_equipo_info(equipo_id):
     row = cur.fetchone()
     if not row:
         cur.close()
-        conn.close()
+        release_db(conn)
         return None
     t1, t2 = row
     # Obtener nombres de los trabajadores
@@ -1619,7 +1648,7 @@ def get_equipo_info(equipo_id):
     cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t2,))
     nombre2 = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     return {
         "id": equipo_id,
         "trabajador1": nombre1[0] if nombre1 else "N/D",
@@ -1636,7 +1665,7 @@ def get_all_equipos():
     cur.execute("SELECT id FROM equipos")
     equipos = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     equipos_list = []
     for row in equipos:
         equipo_id = row[0]
@@ -1661,7 +1690,7 @@ def assign_conjunto_to_equipo(conjunto_id, equipo_id):
     cur.execute("UPDATE conjuntos SET equipo_id = %s WHERE id = %s", (equipo_id, conjunto_id))
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     return True
 
 #########################################
@@ -1719,7 +1748,7 @@ async def select_conjunto_handler(update: Update, context: ContextTypes.DEFAULT_
     cur.execute("SELECT equipo_id, numero_conjunto FROM conjuntos WHERE id = %s", (conjunto_id,))
     row = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     if not row:
         await query.edit_message_text("Conjunto no encontrado.")
         return SELECCIONAR_EQUIPO
@@ -1942,7 +1971,7 @@ def eliminar_equipo(equipo_id):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
 @admin_only
 async def eliminar_equipo_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1989,7 +2018,7 @@ def get_conjuntos_no_terminados():
         cur.execute("SELECT id, numero_conjunto FROM conjuntos")
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        release_db(conn)
         conjuntos = []
         for row in rows:
             conjunto_id, numero = row
@@ -2036,7 +2065,7 @@ def asignar_conjunto_por_numero(numero_conjunto: int, equipo_id: int) -> bool:
         cur.execute("UPDATE conjuntos SET equipo_id = %s WHERE numero_conjunto = %s", (equipo_id, numero_conjunto))
         conn.commit()
         cur.close()
-        conn.close()
+        release_db(conn)
         return True
     except Exception as e:
         logger.error(f"Error al asignar conjunto: {e}")
@@ -2078,7 +2107,7 @@ def revocar_conjunto_por_numero(numero_conjunto: int) -> bool:
         cur.execute("UPDATE conjuntos SET equipo_id = NULL WHERE numero_conjunto = %s", (numero_conjunto,))
         conn.commit()
         cur.close()
-        conn.close()
+        release_db(conn)
         return True
     except Exception as e:
         logger.error(f"Error al revocar conjunto: {e}")
@@ -2202,7 +2231,7 @@ def get_equipo_info(equipo_id):
     row = cur.fetchone()
     if not row:
         cur.close()
-        conn.close()
+        release_db(conn)
         return None
     t1, t2 = row
     # Obtener nombres de los trabajadores
@@ -2211,7 +2240,7 @@ def get_equipo_info(equipo_id):
     cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t2,))
     nombre2 = cur.fetchone()
     cur.close()
-    conn.close()
+    release_db(conn)
     return {
         "trabajador1": nombre1[0] if nombre1 else "N/D",
         "trabajador2": nombre2[0] if nombre2 else "N/D"
@@ -2226,7 +2255,7 @@ def get_conjuntos_by_equipo(equipo_id):
     cur.execute("SELECT id, numero_conjunto FROM conjuntos WHERE equipo_id = %s", (equipo_id,))
     rows = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     conjuntos = []
     for row in rows:
         conjunto_id, numero_conjunto = row
@@ -2247,7 +2276,7 @@ def get_all_equipos_revocar():
     cur.execute("SELECT id, trabajador1, trabajador2 FROM equipos")
     equipos = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     equipos_list = []
     for row in equipos:
         equipo_id, t1, t2 = row
@@ -2271,7 +2300,7 @@ def get_next_available_conjunto_number():
     cur.execute("SELECT numero_conjunto FROM conjuntos ORDER BY numero_conjunto")
     rows = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     used_numbers = {row[0] for row in rows}
     n = 1
     while n in used_numbers:
@@ -2342,7 +2371,7 @@ async def revocar_conjunto_handler(update: Update, context: ContextTypes.DEFAULT
         cur.execute("UPDATE conjuntos SET equipo_id = NULL WHERE id = %s", (conjunto_id,))
         conn.commit()
         cur.close()
-        conn.close()
+        release_db(conn)
     except Exception as e:
         logger.error(f"Error al desasignar el conjunto: {e}")
         await query.edit_message_text("Error al desasignar el conjunto.")
@@ -2444,7 +2473,7 @@ def create_payment_preference_for_cart(cart_id):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
     
     # Usa tu token de producción
     sdk = mercadopago.SDK(MP_SDK)  # Reemplaza con tu token de producción
@@ -2494,7 +2523,7 @@ def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
     order_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
-    conn.close()
+    release_db(conn)
     return order_id, conjunto_id
 
 # Función que recupera todos los equipos y calcula la suma de pedidos pendientes de todos sus conjuntos asignados.
@@ -2509,7 +2538,7 @@ def get_all_equipos_for_view():
     cur.execute("SELECT id FROM equipos")
     equipos = cur.fetchall()
     cur.close()
-    conn.close()
+    release_db(conn)
     
     equipos_list = []
     for row in equipos:
@@ -2525,7 +2554,7 @@ def get_all_equipos_for_view():
         cur.execute("SELECT id FROM conjuntos WHERE equipo_id = %s", (equipo_id,))
         conjuntos = cur.fetchall()
         cur.close()
-        conn.close()
+        release_db(conn)
         
         total_pendientes = 0
         for c in conjuntos:
@@ -2584,7 +2613,7 @@ async def ver_equipo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         cur.execute("SELECT id, numero_conjunto FROM conjuntos WHERE equipo_id = %s", (equipo_id,))
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        release_db(conn)
         conjuntos = []
         for row in rows:
             conjunto_id, numero_conjunto = row
@@ -2665,7 +2694,7 @@ def get_pending_orders(telegram_id, limit=20):
         if cur:
             cur.close()
         if conn:
-            conn.close()
+            release_db(conn)
 
 async def pending_orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra los últimos 20 pedidos pendientes del usuario con un botón para volver al menú principal."""
@@ -2713,7 +2742,7 @@ def crear_nuevo_equipo_db(trabajador1: int, trabajador2: int):
         return None
     finally:
         cur.close()
-        conn.close()
+        release_db(conn)
 
 
 async def crear_nuevo_equipo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2780,8 +2809,7 @@ def get_cart_owner(cart_id):
         logger.error(f"Error al obtener dueño del carrito: {e}")
         return None
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        release_db(conn)
 
 async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
@@ -3023,5 +3051,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=8000)
+
 
