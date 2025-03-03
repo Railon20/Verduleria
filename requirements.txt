@@ -7,3 +7,4 @@ psycopg2-binary==2.9.3
 mercadopago
 python-dotenv==1.0.0
 Werkzeug==2.2.3
+cachetools
