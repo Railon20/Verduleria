@@ -108,20 +108,20 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
 
-#DB_NAME = "verduleria2"
-#DB_USER = "carlos"
-#DB_PASSWORD = "lalala22"
+#DB_NAME = ""
+#DB_USER = ""
+#DB_PASSWORD = ""
 #DB_HOST = "localhost"
-#DB_PORT = "5432"
+#DB_PORT = ""
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-#TOKEN = "7564104399:AAHGNFyMSaVSbEQl3MDGFD4g-jaziwTRw_E"
+#TOKEN = ""
 if not TOKEN:
     raise ValueError("No se encontró la variable de entorno TELEGRAM_TOKEN.")
 
 
 MP_SDK = os.getenv('MP_SDK')
-#MP_SDK = "APP_USR-6499289843479865-011213-c4290cd71ad5e17a9cec6f6e90c4de2c-1368333589"
+#MP_SDK = ""
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
