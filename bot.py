@@ -2746,6 +2746,16 @@ async def crear_nuevo_equipo_handler(update: Update, context: ContextTypes.DEFAU
     await update.message.reply_text(success_text, reply_markup=reply_markup)
     return GESTION_PEDIDOS
 
+# Agrega un handler para el comando /webhookinfo
+async def webhook_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        info = await context.bot.get_webhook_info()
+        # Envía la información como mensaje o imprímela en los logs
+        await update.message.reply_text(f"Webhook Info:\n{info}")
+        logger.info(f"Webhook Info: {info}")
+    except Exception as e:
+        logger.error(f"Error al obtener webhook info: {e}")
+        await update.message.reply_text("Error al obtener la información del webhook.")
 
 def get_cart_owner(cart_id):
     """Retorna el telegram_id del dueño del carrito."""
@@ -2899,8 +2909,9 @@ def mp_webhook():
 
 @app.route('/webhook2', methods=['POST'])
 def webhook():
-    # Convierte el JSON recibido a un objeto Update
-    update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
+    update_json = request.get_json(force=True)
+    logger.info(f"Update recibido en /webhook2: {update_json}")
+    update = Update.de_json(update_json, TELEGRAM_BOT)
     # Procesa la actualización usando la lógica de tu bot
     TELEGRAM_BOT.process_update(update)
     return 'ok', 200
@@ -2921,6 +2932,8 @@ def main() -> None:
     application.add_handler(CommandHandler("asignar_conjunto", asignar_conjunto_command_handler))
     application.add_handler(CommandHandler("revocar_conjunto", revocar_conjunto_command_handler))
     application.add_handler(CommandHandler("ver_conjuntos", ver_conjuntos_no_terminados_handler))
+    application.add_handler(CommandHandler("webhookinfo", webhook_info_handler))
+
 
 
     conv_handler = ConversationHandler(
