@@ -40,7 +40,6 @@ import os
 from flask import Flask, request, jsonify
 import threading
 from psycopg2 import pool
-from config import Config
 from telegram.error import BadRequest
 
 
