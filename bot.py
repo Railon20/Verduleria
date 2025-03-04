@@ -133,6 +133,15 @@ MP_SDK = os.getenv('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
+def set_telegram_webhook():
+    url = "https://verduleria.onrender.com/webhook2"  # Reemplaza con el dominio de tu servicio
+    s = TELEGRAM_BOT.set_webhook(url)
+    if s:
+        logger.info("Webhook configurado correctamente")
+    else:
+        logger.error("Error configurando el webhook")
+
+
 @cached(cache=user_info_cache)
 def get_user_info_cached(telegram_id):
     conn = connect_db()
@@ -180,7 +189,7 @@ def release_db(conn):
 
 def init_db():
     """Crea la tabla 'users' si no existe."""
-    conn = None
+    conn = connect_db()
     cur = None
     try:
     # ... usar conn
@@ -241,7 +250,7 @@ async def show_carts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def update_order_status(confirmation_code):
     """Busca un pedido pendiente con el código dado y lo actualiza a 'entregado'.
        Retorna el telegram_id del usuario si se actualizó correctamente, o None si no se encontró."""
-    conn = None
+    conn = connect_db()
     cur = None
     try:
     # ... usar conn
@@ -1627,32 +1636,6 @@ def get_all_conjuntos():
     conjuntos_list.sort(key=lambda c: c["pendientes"])
     return conjuntos_list
 
-def get_equipo_info(equipo_id):
-    """
-    Retorna un diccionario con la información del equipo.
-    Se consulta la tabla equipos y se obtienen los nombres de los integrantes de la tabla trabajadores.
-    """
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute("SELECT trabajador1, trabajador2 FROM equipos WHERE id = %s", (equipo_id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        release_db(conn)
-        return None
-    t1, t2 = row
-    # Obtener nombres de los trabajadores
-    cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t1,))
-    nombre1 = cur.fetchone()
-    cur.execute("SELECT nombre FROM trabajadores WHERE telegram_id = %s", (t2,))
-    nombre2 = cur.fetchone()
-    cur.close()
-    release_db(conn)
-    return {
-        "id": equipo_id,
-        "trabajador1": nombre1[0] if nombre1 else "N/D",
-        "trabajador2": nombre2[0] if nombre2 else "N/D"
-    }
 
 def get_all_equipos():
     """
@@ -2498,33 +2481,6 @@ def create_payment_preference_for_cart(cart_id):
     init_point = preference.get("init_point")
     return cart_name, init_point
 
-def insert_order_with_conjunto(cart_id, telegram_id, confirmation_code):
-    """
-    Inserta un nuevo pedido y lo asigna a un conjunto.
-    La lógica es:
-      - Si no existe ningún conjunto, o el último conjunto tiene 3 o más pedidos pendientes,
-        se crea un nuevo conjunto utilizando el menor número disponible (reutilizando números liberados).
-      - En caso contrario, se utiliza el último conjunto creado.
-    Retorna una tupla (order_id, conjunto_id).
-    """
-    last = get_last_conjunto()  # Retorna (conjunto_id, numero_conjunto) del último conjunto creado sin asignar
-    if last is None or count_pending_orders_in_conjunto(last[0]) >= 3:
-        new_num = get_next_available_conjunto_number()
-        conjunto_id = create_new_conjunto(new_num)
-    else:
-        conjunto_id = last[0]
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute(
-         "INSERT INTO orders (cart_id, telegram_id, confirmation_code, status, conjunto_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-         (cart_id, telegram_id, confirmation_code, "pendiente", conjunto_id)
-    )
-    order_id = cur.fetchone()[0]
-    conn.commit()
-    cur.close()
-    release_db(conn)
-    return order_id, conjunto_id
-
 # Función que recupera todos los equipos y calcula la suma de pedidos pendientes de todos sus conjuntos asignados.
 def get_all_equipos_for_view():
     """
@@ -2941,10 +2897,13 @@ def mp_webhook():
         logger.info("Notificación no relevante")
     return jsonify({"status": "ignored"}), 200
 
-
-
-def run_flask():
-    app.run(host="0.0.0.0", port=5000)
+@app.route('/webhook2', methods=['POST'])
+def webhook():
+    # Convierte el JSON recibido a un objeto Update
+    update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
+    # Procesa la actualización usando la lógica de tu bot
+    TELEGRAM_BOT.process_update(update)
+    return 'ok', 200
 
 
 def main() -> None:
@@ -2954,6 +2913,8 @@ def main() -> None:
         .token(TOKEN)\
         .build()
     TELEGRAM_BOT = application.bot
+
+    set_telegram_webhook()
 
     application.add_handler(CommandHandler("crear_equipo", crear_equipo_command_handler))
     application.add_handler(CommandHandler("eliminar_equipo", eliminar_equipo_command_handler))
@@ -3043,13 +3004,7 @@ def main() -> None:
 
     application.add_handler(conv_handler)
     
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    
-    application.run_polling()
 
-
-if __name__ == '__main__':
     from waitress import serve
     serve(app, host='0.0.0.0', port=8000)
 
