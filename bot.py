@@ -42,7 +42,6 @@ import threading
 from psycopg2 import pool
 from config import Config
 from telegram.error import BadRequest
-from dotenv import load_dotenv
 
 
 app = Flask(__name__)
