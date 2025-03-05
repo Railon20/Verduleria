@@ -2930,7 +2930,6 @@ def main() -> None:
         .token(TOKEN)\
         .build()
     TELEGRAM_BOT = application.bot
-    logger.info("Telegram Bot inicializado correctamente.")
     set_telegram_webhook()
 
     application.add_handler(CommandHandler("crear_equipo", crear_equipo_command_handler))
@@ -3027,6 +3026,9 @@ def main() -> None:
     from waitress import serve
     serve(app, host='0.0.0.0', port=8000)
 
+def run_bot():
+    print("Iniciando bot...")
+    app_telegram.run_polling()
 
 if __name__ == '__main__':
-    main()
+    run_bot()
