@@ -1,2 +1,2 @@
-# wsgi.py
-from bot import app  # Asegúrate de que 'bot.py' exporte la variable 'app'
+from bot import app, main
+main()  # Inicializa TELEGRAM_BOT y configura el webhook
