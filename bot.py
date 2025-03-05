@@ -2908,12 +2908,19 @@ def mp_webhook():
 
 @app.route('/webhook2', methods=['POST'])
 def webhook():
-    update_json = request.get_json(force=True)
-    logger.info(f"Update recibido en /webhook2: {update_json}")
-    update = Update.de_json(update_json, TELEGRAM_BOT)
-    # Procesa la actualización usando la lógica de tu bot
-    TELEGRAM_BOT.process_update(update)
-    return 'ok', 200
+    try:
+        update_json = request.get_json(force=True)
+        logger.info(f"Update recibido en /webhook2: {update_json}")
+        update = Update.de_json(update_json, TELEGRAM_BOT)
+        TELEGRAM_BOT.process_update(update)
+        return 'ok', 200
+    except Exception as e:
+        logger.exception("Error procesando update en /webhook2")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/ping', methods=['GET'])
+def ping():
+    return "Pong", 200
 
 
 def main() -> None:
