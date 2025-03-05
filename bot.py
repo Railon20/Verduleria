@@ -3028,7 +3028,7 @@ def main() -> None:
 
 def run_bot():
     print("Iniciando bot...")
-    app_telegram.run_polling()
+    application.runpolling()
 
 if __name__ == '__main__':
     run_bot()
