@@ -2906,16 +2906,15 @@ def mp_webhook():
         logger.info("Notificación no relevante")
     return jsonify({"status": "ignored"}), 200
 
-@app.route('/webhook2', methods=['POST'])
+@app.route("/webhook2", methods=["POST"])
 def webhook():
+    """Recibe actualizaciones de Telegram a través del webhook"""
     try:
-        update_json = request.get_json(force=True)
-        logger.info(f"Update recibido en /webhook2: {update_json}")
-        update = Update.de_json(update_json, TELEGRAM_BOT)
-        TELEGRAM_BOT.process_update(update)
-        return 'ok', 200
+        update = Update.de_json(request.get_json(), app_telegram.bot)
+        application.update_queue.put(update)
+        return jsonify({"status": "ok"})
     except Exception as e:
-        logger.exception("Error procesando update en /webhook2")
+        logger.error(f"Error procesando el webhook: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/ping', methods=['GET'])
@@ -3031,4 +3030,10 @@ def run_bot():
     application.runpolling()
 
 if __name__ == '__main__':
-    run_bot()
+    
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        url_path="webhook2",
+        webhook_url="https://verduleria.onrender.com/webhook2"
+    )
