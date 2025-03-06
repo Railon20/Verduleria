@@ -3022,13 +3022,17 @@ def webhook():
         logger.exception("Error procesando update en /webhook2")
         return jsonify({"error": str(e)}), 500
 
+# ... (resto de tu código en bot.py)
+
+@app.before_first_request
+def setup_webhook():
+    webhook_url = "https://verduleria.onrender.com/webhook2"
+    result = TELEGRAM_BOT.set_webhook(webhook_url)
+    if result:
+        logger.info("Webhook configurado correctamente")
+    else:
+        logger.error("Error configurando el webhook")
+
 
 if __name__ == "__main__":
     TELEGRAM_BOT.set_webhook("https://verduleria.onrender.com/webhook2")
-
-    application.run_webhook(
-         listen="0.0.0.0",
-         port=int(os.getenv("PORT", 5000)),  # Usa el puerto asignado o 5000 si no está definido
-         url_path="webhook2",
-         webhook_url="https://verduleria.onrender.com/webhook2"
-    )
