@@ -3016,13 +3016,11 @@ def run_bot():
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        # Procesa la actualización directamente
-        application.process_update(update)
-        return "ok", 200
+        application.update_queue.put(update)
+        return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     # Configura el webhook (ajusta la URL de tu servicio)
