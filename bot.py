@@ -3008,9 +3008,9 @@ def main() -> None:
     from waitress import serve
     serve(app, host='0.0.0.0', port=8000)
 
-def run_bot():
-    print("Iniciando bot...")
-    application.runpolling()
+#def run_bot():
+#    print("Iniciando bot...")
+#    application.runpolling()
 
 @app.route("/webhook2", methods=["POST"])
 def webhook():
