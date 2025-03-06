@@ -1,8 +1,4 @@
 # wsgi.py
-from bot import app  # Asegúrate de exportar app y run_bot desde bot.py
-import threading
+from bot import app  # Solo importa app
 
-# Inicia el bot en un hilo aparte
-#threading.Thread(target=run_bot, daemon=True).start()
-
-# La variable 'app' es la aplicación Flask que usa Render.
+# No inicies el bot con run_bot(), ya que el webhook lo manejará a través de Flask.

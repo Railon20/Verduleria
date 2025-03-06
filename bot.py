@@ -3015,18 +3015,12 @@ def main() -> None:
 @app.route("/webhook2", methods=["POST"])
 def webhook():
     try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put(update)
+        update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
+        asyncio.run(application.process_update(update))
         return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Configura el webhook (ajusta la URL de tu servicio)
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
-        url_path="webhook2",
-        webhook_url="https://verduleria.onrender.com/webhook2"
-    )
+    TELEGRAM_BOT.set_webhook("https://verduleria.onrender.com/webhook2")
