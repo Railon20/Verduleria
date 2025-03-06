@@ -2906,17 +2906,6 @@ def mp_webhook():
         logger.info("Notificación no relevante")
     return jsonify({"status": "ignored"}), 200
 
-@app.route("/webhook2", methods=["POST"])
-def webhook():
-    """Recibe actualizaciones de Telegram a través del webhook"""
-    try:
-        update = Update.de_json(request.get_json(), app_telegram.bot)
-        application.update_queue.put(update)
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        logger.error(f"Error procesando el webhook: {e}")
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/ping', methods=['GET'])
 def ping():
     return "Pong", 200
@@ -3015,10 +3004,6 @@ def main() -> None:
         allow_reentry=True
     )
 
-
-
-
-
     application.add_handler(conv_handler)
     
 
@@ -3029,8 +3014,18 @@ def run_bot():
     print("Iniciando bot...")
     application.runpolling()
 
-if __name__ == '__main__':
-    
+@app.route("/webhook2", methods=["POST"])
+def webhook():
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put(update)
+        return 'ok', 200
+    except Exception as e:
+        logger.exception("Error procesando update en /webhook2")
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    # Configura el webhook (ajusta la URL de tu servicio)
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
