@@ -2917,7 +2917,6 @@ def main() -> None:
         .token(TOKEN)\
         .build()
     TELEGRAM_BOT = application.bot
-    set_telegram_webhook()
 
     application.add_handler(CommandHandler("crear_equipo", crear_equipo_command_handler))
     application.add_handler(CommandHandler("eliminar_equipo", eliminar_equipo_command_handler))
