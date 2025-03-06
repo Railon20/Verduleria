@@ -132,6 +132,9 @@ MP_SDK = os.getenv('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
+application = Application.builder().token(TOKEN).build()
+TELEGRAM_BOT = application.bot
+
 #def set_telegram_webhook():
 #    url = "https://verduleria.onrender.com/webhook2"  # Reemplaza con el dominio de tu servicio
 #    s = TELEGRAM_BOT.set_webhook(url)
@@ -2911,12 +2914,9 @@ def ping():
 
 
 def main() -> None:
-    global TELEGRAM_BOT
+    
     init_db()
-    application = Application.builder()\
-        .token(TOKEN)\
-        .build()
-    TELEGRAM_BOT = application.bot
+    
 
     application.add_handler(CommandHandler("crear_equipo", crear_equipo_command_handler))
     application.add_handler(CommandHandler("eliminar_equipo", eliminar_equipo_command_handler))
