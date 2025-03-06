@@ -132,14 +132,13 @@ MP_SDK = os.getenv('MP_SDK')
 # Conjunto para registrar los IDs de pago ya procesados
 processed_payment_ids = set()
 
-def set_telegram_webhook():
-    url = "https://verduleria.onrender.com/webhook2"  # Reemplaza con el dominio de tu servicio
-    s = TELEGRAM_BOT.set_webhook(url)
-    if s:
-        logger.info("Webhook configurado correctamente")
-    else:
-        logger.error("Error configurando el webhook")
-
+#def set_telegram_webhook():
+#    url = "https://verduleria.onrender.com/webhook2"  # Reemplaza con el dominio de tu servicio
+#    s = TELEGRAM_BOT.set_webhook(url)
+#    if s:
+#        logger.info("Webhook configurado correctamente")
+#    else:
+#        logger.error("Error configurando el webhook")
 
 @cached(cache=user_info_cache)
 def get_user_info_cached(telegram_id):
