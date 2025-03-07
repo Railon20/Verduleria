@@ -46,6 +46,8 @@ from telegram.error import BadRequest
 
 app = Flask(__name__)
 
+BOT_LOOP = None
+
 ADMIN_CHAT_ID = 6952319386  # Reemplaza con el chat ID de tu administrador
 PROVIDER_CHAT_ID = 222222222  # Reemplaza con el chat ID del proveedor
 
@@ -163,6 +165,10 @@ class SimpleContext:
     def __init__(self, bot):
         self.bot = bot
 
+def start_bot_loop(loop):
+    """Función que corre el bucle de eventos del bot de forma indefinida."""
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
 
 def connect_db():
     """Obtiene una conexión del pool."""
@@ -3017,11 +3023,14 @@ def main() -> None:
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
-        asyncio.run(application.process_update(update))
+        # Envía la actualización al bucle global y espera a que se procese (opcionalmente)
+        future = asyncio.run_coroutine_threadsafe(application.process_update(update), BOT_LOOP)
+        future.result()  # Espera (opcional) a que termine; puedes omitirlo si no quieres bloquear la respuesta
         return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
         return jsonify({"error": str(e)}), 500
+
 
 # ... (resto de tu código en bot.py)
 @app.before_first_request
@@ -3038,7 +3047,15 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    # Inicializa la aplicación (esto se encarga de configurar internamente los "converters", el "dispatcher", etc.)
-    asyncio.run(application.initialize())
+    # Crea un nuevo bucle de eventos para el bot
+    BOT_LOOP = asyncio.new_event_loop()
+    # Inicializa la aplicación en ese bucle
+    asyncio.run_coroutine_threadsafe(application.initialize(), BOT_LOOP)
+
+    # Inicia el bucle del bot en un hilo separado (daemon)
+    bot_thread = threading.Thread(target=start_bot_loop, args=(BOT_LOOP,), daemon=True)
+    bot_thread.start()
+
+    # Llama a main() para iniciar el servidor Flask (por medio de waitress)
     main()
 
