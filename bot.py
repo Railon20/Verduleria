@@ -2865,7 +2865,7 @@ async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Comando /test recibido")
     chat_id = update.effective_user.id
     try:
-        # Enviar mensaje de prueba directamente
+        # Enviar mensaje directamente
         await context.bot.send_message(chat_id=chat_id, text="Test OK")
         logger.info("Mensaje 'Test OK' enviado a chat_id: %s", chat_id)
     except Exception as e:
