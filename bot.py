@@ -3039,8 +3039,9 @@ def main() -> None:
 
     application.add_handler(conv_handler)
 
-    application.add_handler(CommandHandler("test", test_handler))
-    
+    application.add_handler(CommandHandler("start", start), group=0)
+    application.add_handler(CommandHandler("test", test_handler), group=0)
+
 
     from waitress import serve
     port = int(os.environ.get("PORT", 8000))
