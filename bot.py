@@ -2863,7 +2863,14 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Comando /test recibido")
-    await update.message.reply_text("Test OK")
+    chat_id = update.effective_user.id
+    try:
+        # Enviar mensaje de prueba directamente
+        await context.bot.send_message(chat_id=chat_id, text="Test OK")
+        logger.info("Mensaje 'Test OK' enviado a chat_id: %s", chat_id)
+    except Exception as e:
+        logger.exception("Error al enviar el mensaje en /test")
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancela la conversación."""
