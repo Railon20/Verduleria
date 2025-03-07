@@ -2952,7 +2952,8 @@ def main() -> None:
     
     init_db()
     
-
+    pplication.add_handler(CommandHandler("start", start), group=0)
+    application.add_handler(CommandHandler("test", test_handler), group=0)
     application.add_handler(CommandHandler("crear_equipo", crear_equipo_command_handler))
     application.add_handler(CommandHandler("eliminar_equipo", eliminar_equipo_command_handler))
     application.add_handler(CommandHandler("asignar_conjunto", asignar_conjunto_command_handler))
@@ -3038,9 +3039,6 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
-
-    application.add_handler(CommandHandler("start", start), group=0)
-    application.add_handler(CommandHandler("test", test_handler), group=0)
 
 
     from waitress import serve
