@@ -33,6 +33,7 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+import sys  # Asegúrate de importarlo para forzar el vaciado del buffer de stdout
 from cachetools import cached, TTLCache
 import mercadopago
 import datetime
@@ -3038,19 +3039,27 @@ def main() -> None:
 #    print("Iniciando bot...")
 #    application.runpolling()
 
+
 @app.route("/webhook2", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
-    logger.info("Actualización recibida: %s", data)
+    # Agrega logs y prints para confirmar que se recibió la actualización
+    logger.info("Webhook triggered. Data received: %s", data)
+    print("Webhook triggered. Data received:", data)
+    sys.stdout.flush()  # Forzar que se escriba inmediatamente en los logs
+
     try:
         update = Update.de_json(data, TELEGRAM_BOT)
+        logger.info("Update object creado correctamente")
         loop = ensure_bot_loop()  # Asegura que el event loop esté corriendo
         future = asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         future.result()  # Espera a que se procese la actualización (opcional)
+        logger.info("Update procesado correctamente")
         return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
         return jsonify({"error": str(e)}), 500
+
 
 
 # ... (resto de tu código en bot.py)
