@@ -3063,8 +3063,8 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    ensure_bot_loop()  # Crea e inicia BOT_LOOP
-    # Configura explícitamente el webhook antes de iniciar el servidor Flask
+    ensure_bot_loop()  # Asegura que el event loop esté corriendo
+    # Configurar el webhook con la URL correcta
     webhook_url = "https://verduleria.onrender.com/webhook2"
     if TELEGRAM_BOT.set_webhook(webhook_url):
         logger.info("Webhook configurado correctamente")
