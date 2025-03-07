@@ -3006,7 +3006,8 @@ def main() -> None:
     
 
     from waitress import serve
-    serve(app, host='0.0.0.0', port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    serve(app, host="0.0.0.0", port=port)
 
 #def run_bot():
 #    print("Iniciando bot...")
@@ -3023,7 +3024,6 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 # ... (resto de tu código en bot.py)
-
 @app.before_first_request
 def setup_webhook():
     webhook_url = "https://verduleria.onrender.com/webhook2"
@@ -3035,4 +3035,5 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    TELEGRAM_BOT.set_webhook("https://verduleria.onrender.com/webhook2")
+    main()
+
