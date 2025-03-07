@@ -3,6 +3,7 @@
 # IMPORTANTE: Asegúrate de tener instalada la tabla "products" en tu base de datos.
 
 # --- Forzamos que tzlocal retorne una zona de pytz (si fuera necesario) ---
+import asyncio
 import tzlocal
 import pytz
 # Forzamos que tzlocal.get_localzone() retorne pytz.utc
