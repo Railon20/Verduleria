@@ -3039,5 +3039,8 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
+    import asyncio
+    # Inicializa la aplicación (esto se encarga de configurar internamente los "converters", el "dispatcher", etc.)
+    asyncio.run(application.initialize())
     main()
 
