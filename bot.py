@@ -2855,7 +2855,9 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
     return POST_ADHESION
 
-
+async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Comando /test recibido")
+    await update.message.reply_text("Test OK")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancela la conversación."""
@@ -3024,6 +3026,8 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
+
+    application.add_handler(CommandHandler("test", test_handler))
     
 
     from waitress import serve
@@ -3036,12 +3040,13 @@ def main() -> None:
 
 @app.route("/webhook2", methods=["POST"])
 def webhook():
+    data = request.get_json(force=True)
+    logger.info("Actualización recibida: %s", data)
     try:
-        update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
-        loop = ensure_bot_loop()  # Asegura que el bucle global esté creado y corriendo
-        # Envía la actualización al bucle global
+        update = Update.de_json(data, TELEGRAM_BOT)
+        loop = ensure_bot_loop()  # Asegura que el event loop esté corriendo
         future = asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
-        future.result()  # (opcional) Espera a que se procese la actualización
+        future.result()  # Espera a que se procese la actualización (opcional)
         return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
@@ -3063,12 +3068,12 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    ensure_bot_loop()  # Asegura que el event loop esté corriendo
-    # Configurar el webhook con la URL correcta
+    ensure_bot_loop()  # Esto crea y arranca BOT_LOOP
     webhook_url = "https://verduleria.onrender.com/webhook2"
     if TELEGRAM_BOT.set_webhook(webhook_url):
         logger.info("Webhook configurado correctamente")
     else:
         logger.error("Error configurando el webhook")
     main()
+
 
