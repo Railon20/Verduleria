@@ -2888,7 +2888,6 @@ def mp_webhook():
                 if order_id is None:
                     logger.error("Error al insertar el pedido")
                 try:
-                    import asyncio
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     context_wrapper = SimpleContext(TELEGRAM_BOT)
@@ -3039,7 +3038,6 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    import asyncio
     # Inicializa la aplicación (esto se encarga de configurar internamente los "converters", el "dispatcher", etc.)
     asyncio.run(application.initialize())
     main()
