@@ -3030,8 +3030,11 @@ def setup_webhook():
     result = TELEGRAM_BOT.set_webhook(webhook_url)
     if result:
         logger.info("Webhook configurado correctamente")
+        print("setup_webhook() se ha ejecutado: Webhook configurado correctamente")
     else:
         logger.error("Error configurando el webhook")
+        print("setup_webhook() se ha ejecutado: Error configurando el webhook")
+
 
 
 if __name__ == "__main__":
