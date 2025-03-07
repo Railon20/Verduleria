@@ -204,8 +204,6 @@ def connect_db():
     #    port=DB_PORT
     #)
 
-TELEGRAM_BOT.send_message(chat_id=update.effective_user.id, text="Mensaje directo de prueba")
-
 
 def release_db(conn):
     """Devuelve la conexión al pool."""
