@@ -204,6 +204,9 @@ def connect_db():
     #    port=DB_PORT
     #)
 
+TELEGRAM_BOT.send_message(chat_id=update.effective_user.id, text="Mensaje directo de prueba")
+
+
 def release_db(conn):
     """Devuelve la conexión al pool."""
     try:
@@ -1325,21 +1328,19 @@ def get_product(product_id):
 # ----------------- HANDLERS -----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info("Comando /start recibido de usuario %s", update.effective_user.id)
     telegram_id = update.effective_user.id
-    # Se consulta si el usuario ya está registrado
-    conn = None
-    cur = None
+
+    # Consultar si el usuario está registrado
     try:
         conn = connect_db()
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
         user = cur.fetchone()
+        logger.info("Resultado de consulta para usuario %s: %s", telegram_id, user)
     except Exception as e:
-        logger.error(f"Error al consultar la base de datos: {e}")
-        if update.message:
-            await update.message.reply_text("Error al conectar a la base de datos.")
-        else:
-            await update.callback_query.edit_message_text("Error al conectar a la base de datos.")
+        logger.exception("Error al consultar la base de datos")
+        await update.message.reply_text("Error al conectar a la base de datos.")
         return ConversationHandler.END
     finally:
         if cur:
@@ -1347,12 +1348,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if conn:
             release_db(conn)
 
-    # Si el usuario no existe, inicia el proceso de registro
+    # Si el usuario no está registrado, solicita el nombre
     if not user:
+        logger.info("Usuario no registrado, pidiendo nombre")
         await update.message.reply_text("Bienvenido. Para comenzar, ingresa tu nombre:")
         return NAME
 
-    # Si el usuario ya está registrado, se muestra el menú principal con las nuevas opciones
+    # Si el usuario ya está registrado, envía el menú principal
+    logger.info("Usuario registrado, enviando menú principal")
     keyboard = [
         [InlineKeyboardButton("Ordenar", callback_data="menu_ordenar")],
         [InlineKeyboardButton("Historial", callback_data="menu_historial")],
@@ -1362,17 +1365,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [InlineKeyboardButton("Contacto", callback_data="menu_contacto")],
         [InlineKeyboardButton("Ayuda", callback_data="menu_ayuda")]
     ]
-    # Opciones para administradores y trabajadores (si corresponde)
     if telegram_id in allowed_ids:
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos y Equipos", callback_data="gestion_pedidos")])
     if es_trabajador(telegram_id):
         keyboard.append([InlineKeyboardButton("Gestión de Pedidos", callback_data="gestion_pedidos_personal")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if update.message:
-        await update.message.reply_text("Menú Principal:", reply_markup=reply_markup)
-    else:
-        await update.callback_query.edit_message_text("Menú Principal:", reply_markup=reply_markup)
+    
+    # Enviar un mensaje de prueba adicional para confirmar el envío
+    try:
+        await update.message.reply_text("Enviando mensaje de prueba...", reply_markup=reply_markup)
+        logger.info("Mensaje de prueba enviado correctamente")
+    except Exception as e:
+        logger.exception("Error al enviar el mensaje de prueba")
+    
     return MAIN_MENU
+
 
 
 async def name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
