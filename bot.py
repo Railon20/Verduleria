@@ -170,6 +170,20 @@ def start_bot_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
+def ensure_bot_loop():
+    """Se asegura de que BOT_LOOP esté inicializado y corriendo.
+    Si no está creado, lo crea, inicia el hilo y ejecuta la inicialización de la aplicación.
+    """
+    global BOT_LOOP
+    if BOT_LOOP is None:
+        BOT_LOOP = asyncio.new_event_loop()
+        # Inicia el bucle en un hilo separado (daemon)
+        threading.Thread(target=start_bot_loop, args=(BOT_LOOP,), daemon=True).start()
+        # Inicializa la aplicación en ese bucle
+        future = asyncio.run_coroutine_threadsafe(application.initialize(), BOT_LOOP)
+        future.result()  # Espera a que se inicialice
+    return BOT_LOOP
+
 def connect_db():
     """Obtiene una conexión del pool."""
     try:
@@ -3023,9 +3037,10 @@ def main() -> None:
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), TELEGRAM_BOT)
-        # Envía la actualización al bucle global y espera a que se procese (opcionalmente)
-        future = asyncio.run_coroutine_threadsafe(application.process_update(update), BOT_LOOP)
-        future.result()  # Espera (opcional) a que termine; puedes omitirlo si no quieres bloquear la respuesta
+        loop = ensure_bot_loop()  # Asegura que el bucle global esté creado y corriendo
+        # Envía la actualización al bucle global
+        future = asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+        future.result()  # (opcional) Espera a que se procese la actualización
         return 'ok', 200
     except Exception as e:
         logger.exception("Error procesando update en /webhook2")
@@ -3047,15 +3062,6 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    # Crea un nuevo bucle de eventos para el bot
-    BOT_LOOP = asyncio.new_event_loop()
-    # Inicializa la aplicación en ese bucle
-    asyncio.run_coroutine_threadsafe(application.initialize(), BOT_LOOP)
-
-    # Inicia el bucle del bot en un hilo separado (daemon)
-    bot_thread = threading.Thread(target=start_bot_loop, args=(BOT_LOOP,), daemon=True)
-    bot_thread.start()
-
-    # Llama a main() para iniciar el servidor Flask (por medio de waitress)
+    ensure_bot_loop()  # Esto creará e iniciará BOT_LOOP si aún no existe
     main()
 
