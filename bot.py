@@ -2870,6 +2870,13 @@ async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("Error al enviar el mensaje en /test")
 
+@app.route('/env', methods=['GET'])
+def env_info():
+    return jsonify({
+        "TELEGRAM_TOKEN": TOKEN[:10] + "..." if TOKEN else None,
+        "MP_SDK": MP_SDK[:10] + "..." if MP_SDK else None
+    })
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancela la conversación."""
