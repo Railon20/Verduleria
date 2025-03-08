@@ -2862,13 +2862,14 @@ async def new_cart_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     return POST_ADHESION
 
 async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Comando /test recibido")
+    logger.info("Ejecutando /test")
     chat_id = update.effective_user.id
     try:
-        response = await context.bot.send_message(chat_id=chat_id, text="Test OK")
-        logger.info("Mensaje 'Test OK' enviado a chat_id %s. Respuesta: %s", chat_id, response)
+        await context.bot.send_message(chat_id=chat_id, text="Test OK")
+        logger.info("Mensaje 'Test OK' enviado a %s", chat_id)
     except Exception as e:
-        logger.exception("Error al enviar el mensaje en /test")
+        logger.exception("Error en /test: %s", e)
+
 
 @app.route('/testupdate', methods=['POST'])
 def test_update():
@@ -3105,12 +3106,13 @@ def setup_webhook():
 
 
 if __name__ == "__main__":
-    ensure_bot_loop()  # Esto crea y arranca BOT_LOOP
-    webhook_url = "https://verduleria.onrender.com/webhook2"
-    if TELEGRAM_BOT.set_webhook(webhook_url):
-        logger.info("Webhook configurado correctamente")
-    else:
-        logger.error("Error configurando el webhook")
-    main()
+    #ensure_bot_loop()  # Esto crea y arranca BOT_LOOP
+    #webhook_url = "https://verduleria.onrender.com/webhook2"
+    #if TELEGRAM_BOT.set_webhook(webhook_url):
+    #    logger.info("Webhook configurado correctamente")
+    #else:
+    #    logger.error("Error configurando el webhook")
+    #main()
+    application.run_polling()
 
 
