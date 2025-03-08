@@ -2960,6 +2960,11 @@ def mp_webhook():
 def ping():
     return "Pong", 200
 
+async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=update.effective_user.id, text="Pong")
+    logger.info("Comando /ping ejecutado correctamente")
+
+
 
 def main() -> None:
     
@@ -2974,7 +2979,7 @@ def main() -> None:
     application.add_handler(CommandHandler("ver_conjuntos", ver_conjuntos_no_terminados_handler))
     application.add_handler(CommandHandler("webhookinfo", webhook_info_handler))
 
-
+    application.add_handler(CommandHandler("ping", ping_handler), group=0)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
