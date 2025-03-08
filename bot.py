@@ -2870,6 +2870,12 @@ async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("Error al enviar el mensaje en /test")
 
+@app.route('/testupdate', methods=['POST'])
+def test_update():
+    data = request.get_json(force=True)
+    logger.info("Test update received: %s", data)
+    return jsonify({"status": "received", "data": data}), 200
+
 @app.route('/env', methods=['GET'])
 def env_info():
     return jsonify({
